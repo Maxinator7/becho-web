@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
+import { formatPrice } from '../../utils/format';
 import { MessageSquare, Send, CheckCheck, Tag, TrendingDown, CheckCircle, XCircle, RotateCcw, X } from 'lucide-react';
 
 interface ConversationItem {
@@ -30,12 +31,14 @@ interface Offer {
   listingId: string;
   buyerId: string;
   sellerId: string;
+  proposedById: string;
   amount: number;
   status: string;
   message?: string;
   createdAt: string;
   buyer: { id: string; displayName: string };
   seller: { id: string; displayName: string };
+  proposedBy: { id: string; displayName: string };
   listing: { id: string; title: string; price: number };
   parentOffer?: { id: string; amount: number; status: string } | null;
   counterOffers?: { id: string; amount: number; status: string; createdAt: string }[];
@@ -76,9 +79,6 @@ export const Chat: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!user) navigate('/login');
-  }, [user, navigate]);
 
   const loadConversations = async () => {
     const res = await fetchApi<ConversationItem[]>('/conversations');
@@ -113,17 +113,19 @@ export const Chat: React.FC = () => {
   }, [activeConversationId]);
 
   // Load offers for the active conversation's listing
+  const loadOffers = (conv: ConversationItem) =>
+    fetchApi<Offer[]>(`/offers/chain?listingId=${conv.listingId}&buyerId=${conv.buyer.id}`).then((res) => {
+      if (res.success && res.data) setOffers([...res.data].reverse());
+    });
+
+  const activeListingId = activeConversation?.listingId;
+  const activeBuyerId = activeConversation?.buyer.id;
   useEffect(() => {
     if (!activeConversation || !user) return;
-    const isSeller = activeConversation.seller.id === user.id;
-    const endpoint = isSeller
-      ? `/offers/listing/${activeConversation.listingId}`
-      : `/offers/chain?listingId=${activeConversation.listingId}&buyerId=${activeConversation.buyer.id}`;
-
-    fetchApi<Offer[]>(endpoint).then((res) => {
-      if (res.success && res.data) setOffers(res.data);
-    });
-  }, [activeConversation, user]);
+    loadOffers(activeConversation);
+    // Re-fetch only when the negotiation thread changes, not on every message poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeListingId, activeBuyerId, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -150,8 +152,12 @@ export const Chat: React.FC = () => {
     setActingOnOffer(offerId);
     const res = await fetchApi<Offer>(`/offers/${offerId}/${action}`, { method: 'POST' });
     setActingOnOffer(null);
-    if (res.success && res.data) {
-      setOffers((prev) => prev.map((o) => (o.id === offerId ? res.data! : o)));
+    if (res.success && activeConversation) {
+      // Accepting changes other offers and the listing status, so reload everything.
+      loadOffers(activeConversation);
+      loadMessages(activeConversation.id);
+    } else if (!res.success) {
+      alert(res.error?.message || 'Action failed');
     }
   };
 
@@ -199,11 +205,11 @@ export const Chat: React.FC = () => {
               <RotateCcw size={18} color="var(--accent-primary)" /> Counter Offer
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-              Their offer: <strong style={{ color: '#f59e0b' }}>${counterTargetOffer.amount.toLocaleString()}</strong>
+              Their offer: <strong style={{ color: '#f59e0b' }}>{formatPrice(counterTargetOffer.amount)}</strong>
             </p>
             <form onSubmit={handleSubmitCounter} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Your Counter Amount ($)</label>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Your Counter Amount (₹)</label>
                 <input
                   id="counter-amount-input"
                   type="number" min="1" step="0.01"
@@ -302,7 +308,7 @@ export const Chat: React.FC = () => {
                   )}
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '1rem' }}>{activeConversation.listing.title}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 600 }}>${activeConversation.listing.price.toLocaleString()}</div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 600 }}>{formatPrice(activeConversation.listing.price)}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -337,17 +343,17 @@ export const Chat: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '240px', overflowY: 'auto' }}>
                     {offers.map((offer) => {
-                      const isMine = offer.buyerId === user?.id;
-                      const iAmSeller = offer.sellerId === user?.id;
-                      const canAct = iAmSeller && offer.status === 'PENDING';
+                      // The proposer can withdraw; only the other party can accept, counter or reject.
+                      const isMine = offer.proposedById === user?.id;
+                      const canAct = !isMine && offer.status === 'PENDING';
                       const canCancel = isMine && offer.status === 'PENDING';
                       return (
                         <div key={offer.id} style={{ padding: '0.85rem 1rem', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${STATUS_COLORS[offer.status] || 'rgba(255,255,255,0.08)'}` }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                              <span style={{ fontWeight: 700, fontSize: '1rem', color: STATUS_COLORS[offer.status] }}>${offer.amount.toLocaleString()}</span>
+                              <span style={{ fontWeight: 700, fontSize: '1rem', color: STATUS_COLORS[offer.status] }}>{formatPrice(offer.amount)}</span>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.6rem' }}>
-                                from {offer.buyer.displayName} · {new Date(offer.createdAt).toLocaleDateString()}
+                                from {isMine ? 'you' : offer.proposedBy.displayName} · {new Date(offer.createdAt).toLocaleDateString('en-IN')}
                               </span>
                             </div>
                             <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '10px', background: `${STATUS_COLORS[offer.status]}22`, color: STATUS_COLORS[offer.status], fontWeight: 700 }}>
@@ -357,7 +363,7 @@ export const Chat: React.FC = () => {
                           {offer.message && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem', fontStyle: 'italic' }}>"{offer.message}"</p>}
                           {offer.parentOffer && (
                             <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                              ↩ In reply to ${offer.parentOffer.amount.toLocaleString()}
+                              ↩ In reply to {formatPrice(offer.parentOffer.amount)}
                             </p>
                           )}
                           {(canAct || canCancel) && (

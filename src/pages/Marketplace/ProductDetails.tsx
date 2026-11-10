@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
+import { formatPrice, CONDITION_LABELS, LISTING_STATUS_LABELS } from '../../utils/format';
 import { Heart, MessageSquare, MapPin, Calendar, ShieldCheck, ArrowLeft, Layers, Tag, X, TrendingDown } from 'lucide-react';
 
 interface ListingDetail {
@@ -10,6 +11,7 @@ interface ListingDetail {
   title: string;
   description: string;
   price: number;
+  status: string;
   condition: string;
   countryCode: string;
   stateCode: string;
@@ -32,6 +34,7 @@ interface Offer {
   id: string;
   listingId?: string;
   listing?: { id: string };
+  proposedById?: string;
   amount: number;
   status: string;
   message?: string;
@@ -189,14 +192,14 @@ export const ProductDetails: React.FC = () => {
               <TrendingDown size={20} color="var(--accent-primary)" /> Make an Offer
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Listed at <strong style={{ color: 'var(--accent-primary)' }}>${listing.price.toLocaleString()}</strong>. Your offer goes directly to the seller.
+              Listed at <strong style={{ color: 'var(--accent-primary)' }}>{formatPrice(listing.price)}</strong>. Your offer goes directly to the seller.
             </p>
 
             <form onSubmit={handleSubmitOffer} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>Your Offer Amount ($)</label>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.4rem' }}>Your Offer Amount (₹)</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontWeight: 700 }}>$</span>
+                  <span style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontWeight: 700 }}>₹</span>
                   <input
                     id="offer-amount-input"
                     type="number"
@@ -313,12 +316,17 @@ export const ProductDetails: React.FC = () => {
                 {listing.category?.name || 'General'}
               </span>
               <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', borderRadius: '20px' }}>
-                Condition: {listing.condition}
+                Condition: {CONDITION_LABELS[listing.condition] ?? listing.condition}
               </span>
             </div>
 
             <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '1rem', lineHeight: '1.3' }}>{listing.title}</h1>
-            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '1.5rem' }}>${listing.price.toLocaleString()}</div>
+            <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '1.5rem' }}>{formatPrice(listing.price)}</div>
+            {listing.status !== 'LIVE' && (
+              <div style={{ marginTop: '-1rem', marginBottom: '1.25rem', fontWeight: 700, color: LISTING_STATUS_LABELS[listing.status]?.color ?? 'var(--text-secondary)' }}>
+                {listing.status === 'RESERVED' ? 'Reserved — the seller has accepted an offer' : listing.status === 'SOLD' ? 'This item has been sold' : `Status: ${LISTING_STATUS_LABELS[listing.status]?.label ?? listing.status}`}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
@@ -337,7 +345,7 @@ export const ProductDetails: React.FC = () => {
                 border: `1px solid ${STATUS_COLORS[existingOffer.status] || 'rgba(255,255,255,0.1)'}`,
               }}>
                 <div style={{ fontWeight: 700, color: STATUS_COLORS[existingOffer.status], fontSize: '0.95rem', marginBottom: '0.3rem' }}>
-                  Your Offer: ${existingOffer.amount.toLocaleString()} — {existingOffer.status}
+                  {existingOffer.proposedById === user?.id ? 'Your offer' : 'Seller counter-offer'}: {formatPrice(existingOffer.amount)} — {existingOffer.status}
                 </div>
                 {existingOffer.status === 'PENDING' && (
                   <button id="cancel-offer-btn" onClick={handleCancelOffer} style={{ fontSize: '0.78rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -368,7 +376,7 @@ export const ProductDetails: React.FC = () => {
                 </button>
               </div>
 
-              {!isSeller && (
+              {!isSeller && listing.status === 'LIVE' && (
                 <button
                   id="make-offer-btn"
                   onClick={() => setShowOfferModal(true)}

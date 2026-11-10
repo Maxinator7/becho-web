@@ -31,3 +31,12 @@ src/
    ```bash
    npm run dev
    ```
+
+Requires `becho-api` running on `http://localhost:4000` (see its README). The dev server runs on port 3000,
+which must be listed in the API's `CORS_ORIGINS`.
+
+## Notes
+
+- Sessions persist in `localStorage`; expired access tokens are refreshed automatically (`src/api/client.ts`).
+- The city picked in the navbar (`LocationContext`) filters Browse and is the default location for new listings.
+- Prices are shown in INR with Indian digit grouping (`src/utils/format.ts`).

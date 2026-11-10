@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
+import { formatPrice } from '../../utils/format';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
 import { Heart, MapPin } from 'lucide-react';
@@ -114,7 +115,7 @@ export const Favorites: React.FC = () => {
                   </span>
                   <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem', lineHeight: '1.4' }}>{item.title}</h3>
                   <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-primary)', marginTop: 'auto', marginBottom: '0.75rem' }}>
-                    ${item.price.toLocaleString()}
+                    {formatPrice(item.price)}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                     <MapPin size={14} color="var(--accent-secondary)" /> {item.cityCode}, {item.stateCode}

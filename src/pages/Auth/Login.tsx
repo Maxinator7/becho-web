@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { fetchApi } from '../../api/client';
-import { useAuth } from '../../context/AuthContext';
+import { useNavigate, Link, useLocation as useRouterLocation } from 'react-router-dom';
+import { fetchApi, AuthTokens } from '../../api/client';
+import { useAuth, UserProfile } from '../../context/AuthContext';
 import { LogIn, AlertCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
@@ -11,6 +11,7 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const from = ((useRouterLocation().state || {}) as { from?: string }).from || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,20 +20,20 @@ export const Login: React.FC = () => {
 
     const isEmail = emailOrPhone.includes('@');
     const body = {
-      email: isEmail ? emailOrPhone : undefined,
-      phone: !isEmail ? emailOrPhone : undefined,
+      email: isEmail ? emailOrPhone.trim() : undefined,
+      phone: !isEmail ? emailOrPhone.trim() : undefined,
       password,
     };
 
-    const res = await fetchApi<{ tokens: { accessToken: string; refreshToken: string }; user: any }>('/auth/login', {
+    const res = await fetchApi<{ tokens: AuthTokens; user: UserProfile }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(body),
     });
 
     setLoading(false);
     if (res.success && res.data) {
-      login(res.data.tokens.accessToken, res.data.tokens.refreshToken, res.data.user);
-      navigate('/');
+      login(res.data.tokens, res.data.user);
+      navigate(res.data.user.status === 'PENDING_VERIFICATION' ? '/verify' : from, { replace: true, state: { from } });
     } else {
       setError(res.error?.message || 'Login failed. Please check credentials.');
     }
@@ -62,7 +63,7 @@ export const Login: React.FC = () => {
               required
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
-              placeholder="user@example.com or +1234567890"
+              placeholder="98765 43210 or you@example.com"
               style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)' }}
             />
           </div>

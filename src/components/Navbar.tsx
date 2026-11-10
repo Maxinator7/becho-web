@@ -5,7 +5,7 @@ import { LocationSelector } from './LocationSelector';
 import { ShoppingBag, Heart, MessageSquare, PlusCircle, LogOut, User, Shield } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isVerified, isStaff } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -14,7 +14,8 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="glass-panel" style={{ padding: '0.85rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+    <>
+    <nav className="glass-panel" style={{ position: 'relative', zIndex: 50, padding: '0.85rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
         <Link to="/" style={{ fontSize: '1.35rem', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <ShoppingBag size={22} color="var(--accent-primary)" />
@@ -42,7 +43,7 @@ export const Navbar: React.FC = () => {
               My Listings
             </Link>
 
-            {user.role === 'ADMIN' && (
+            {isStaff && (
               <Link to="/admin" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none', color: 'var(--accent-secondary)', fontSize: '0.9rem', fontWeight: 600 }}>
                 <Shield size={16} /> Admin
               </Link>
@@ -72,5 +73,11 @@ export const Navbar: React.FC = () => {
         )}
       </div>
     </nav>
+    {user && !isVerified && (
+      <div style={{ margin: '-1.25rem 0 1.5rem', padding: '0.65rem 1rem', borderRadius: '8px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem' }}>
+        Verify your account to sell, chat and make offers. <Link to="/verify" style={{ fontWeight: 700, textDecoration: 'underline' }}>Verify now</Link>
+      </div>
+    )}
+    </>
   );
 };

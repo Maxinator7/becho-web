@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
+import { useLocation } from '../../context/LocationContext';
+import { formatPrice, CONDITION_LABELS } from '../../utils/format';
 import { Navbar } from '../../components/Navbar';
 import { Search, SlidersHorizontal, ChevronRight, MapPin, ArrowUpDown, ChevronLeft } from 'lucide-react';
 
@@ -33,6 +35,8 @@ interface PaginationInfo {
 
 export const Browse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { selectedArea, areas } = useLocation();
+  const cityName = (code: string) => areas.find((a) => a.cityCode === code)?.cityName ?? code;
 
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [listings, setListings] = useState<ListingItem[]>([]);
@@ -71,6 +75,11 @@ export const Browse: React.FC = () => {
     params.set('limit', '12');
 
     setSearchParams(params);
+    // City comes from the navbar selector, not the URL.
+    if (selectedArea) {
+      params.set('countryCode', selectedArea.countryCode);
+      params.set('cityCode', selectedArea.cityCode);
+    }
 
     const res = await fetchApi<{ listings: ListingItem[]; pagination: PaginationInfo }>(`/listings?${params.toString()}`);
     setLoading(false);
@@ -84,7 +93,7 @@ export const Browse: React.FC = () => {
 
   useEffect(() => {
     loadListings();
-  }, [selectedCategoryId, searchQuery, minPrice, maxPrice, condition, sortOrder, currentPage]);
+  }, [selectedCategoryId, searchQuery, minPrice, maxPrice, condition, sortOrder, currentPage, selectedArea]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,7 +198,7 @@ export const Browse: React.FC = () => {
             {/* Price Range Filter */}
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
-                Price Range ($)
+                Price Range (₹)
               </label>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <input
@@ -260,7 +269,8 @@ export const Browse: React.FC = () => {
                 <option value="NEW" style={{ background: '#0f172a' }}>Brand New</option>
                 <option value="LIKE_NEW" style={{ background: '#0f172a' }}>Like New</option>
                 <option value="USED" style={{ background: '#0f172a' }}>Used</option>
-                <option value="FAIR" style={{ background: '#0f172a' }}>Fair</option>
+                <option value="REFURBISHED" style={{ background: '#0f172a' }}>Refurbished</option>
+                <option value="FOR_PARTS" style={{ background: '#0f172a' }}>For Parts</option>
               </select>
             </div>
           </div>
@@ -355,14 +365,14 @@ export const Browse: React.FC = () => {
                         </h3>
 
                         <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '0.75rem' }}>
-                          ${item.price.toLocaleString()}
+                          {formatPrice(item.price)}
                         </div>
 
                         <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <MapPin size={12} color="var(--accent-secondary)" /> {item.cityCode}
+                            <MapPin size={12} color="var(--accent-secondary)" /> {cityName(item.cityCode)}
                           </span>
-                          <span>{item.condition}</span>
+                          <span>{CONDITION_LABELS[item.condition] ?? item.condition}</span>
                         </div>
                       </div>
                     </Link>

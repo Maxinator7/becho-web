@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useLocation } from '../../context/LocationContext';
 import { PlusCircle, Upload, AlertCircle } from 'lucide-react';
 
 interface CategoryNode {
@@ -27,6 +28,15 @@ interface AttributeDefinition {
 export const CreateListing: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { areas, selectedArea } = useLocation();
+  const sellingAreas = areas.filter((a) => a.sellingEnabled);
+  const [cityCode, setCityCode] = useState<string>('');
+  // Default the listing location to the city chosen in the navbar.
+  useEffect(() => {
+    if (cityCode || sellingAreas.length === 0) return;
+    const preferred = sellingAreas.find((a) => a.cityCode === selectedArea?.cityCode) ?? sellingAreas[0];
+    setCityCode(preferred.cityCode);
+  }, [sellingAreas, selectedArea, cityCode]);
 
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string>('');
@@ -52,6 +62,8 @@ export const CreateListing: React.FC = () => {
 
   const handleSubcategoryChange = (subcatId: string) => {
     setSelectedSubcategoryId(subcatId);
+    setAttributes([]);
+    setAttributeValues({});
     if (!subcatId) return;
 
     fetchApi<AttributeDefinition[]>(`/categories/${subcatId}/attributes`).then((res) => {
@@ -71,10 +83,20 @@ export const CreateListing: React.FC = () => {
     setError(null);
     setLoading(true);
 
-    const attrArray = Object.entries(attributeValues).map(([attrId, val]) => ({
-      attributeDefinitionId: attrId,
-      valueText: typeof val === 'string' ? val : String(val),
-    }));
+    const area = sellingAreas.find((a) => a.cityCode === cityCode);
+    if (!area) {
+      setLoading(false);
+      setError('Please choose the city where the item is located.');
+      return;
+    }
+
+    const attrArray = attributes
+      .filter((attr) => attributeValues[attr.id] !== undefined && attributeValues[attr.id] !== '')
+      .map((attr) =>
+        attr.dataType === 'NUMBER' || attr.dataType === 'CURRENCY'
+          ? { attributeDefinitionId: attr.id, valueNumber: Number(attributeValues[attr.id]) }
+          : { attributeDefinitionId: attr.id, valueText: String(attributeValues[attr.id]) }
+      );
 
     const body = {
       categoryId: selectedSubcategoryId,
@@ -82,8 +104,11 @@ export const CreateListing: React.FC = () => {
       description,
       price: parseFloat(price),
       condition,
+      countryCode: area.countryCode,
+      stateCode: area.stateCode,
+      cityCode: area.cityCode,
       attributes: attrArray,
-      media: imageUrl ? [{ url: imageUrl, storageKey: `media-${Date.now()}` }] : [],
+      media: imageUrl ? [{ url: imageUrl.trim() }] : [],
     };
 
     const createRes = await fetchApi<{ id: string }>('/listings', {
@@ -93,14 +118,14 @@ export const CreateListing: React.FC = () => {
 
     if (createRes.success && createRes.data) {
       // Auto-submit to LIVE state
-      const submitRes = await fetchApi(`/listings/${createRes.data.id}/submit`, {
+      const submitRes = await fetchApi<{ status: string }>(`/listings/${createRes.data.id}/submit`, {
         method: 'POST',
       });
       setLoading(false);
       if (submitRes.success) {
-        navigate('/my-listings');
+        navigate('/my-listings', { state: { notice: submitRes.data?.status === 'PENDING_REVIEW' ? 'Your listing is being reviewed by our team and will go live once approved.' : 'Your listing is live!' } });
       } else {
-        setError('Draft created, but failed to publish.');
+        setError(`Saved as draft, but could not publish: ${submitRes.error?.message || 'unknown error'}`);
       }
     } else {
       setLoading(false);
@@ -167,7 +192,7 @@ export const CreateListing: React.FC = () => {
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Price ($) *</label>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Price (₹) *</label>
               <input
                 type="number"
                 required
@@ -205,6 +230,20 @@ export const CreateListing: React.FC = () => {
                 <option value="USED">Used</option>
                 <option value="REFURBISHED">Refurbished</option>
                 <option value="FOR_PARTS">For Parts</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>City *</label>
+              <select
+                required
+                value={cityCode}
+                onChange={(e) => setCityCode(e.target.value)}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+              >
+                {sellingAreas.length === 0 && <option value="">No cities available</option>}
+                {sellingAreas.map((a) => (
+                  <option key={a.id} value={a.cityCode}>{a.cityName}, {a.stateName}</option>
+                ))}
               </select>
             </div>
           </div>
