@@ -1,0 +1,12 @@
+// Cloudflare Workers static-assets config. `npm run build` produces dist/,
+// then Cloudflare runs `npx wrangler deploy`, which serves dist/ as a single-page app.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "becho-web",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Unknown paths such as /listing/123 get index.html so React Router can handle them.
+    "not_found_handling": "single-page-application"
+  }
+}

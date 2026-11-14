@@ -41,6 +41,6 @@ which must be listed in the API's `CORS_ORIGINS`.
 - The city picked in the navbar (`LocationContext`) filters Browse and is the default location for new listings.
 - Prices are shown in INR with Indian digit grouping (`src/utils/format.ts`).
 
-## Deploying (Cloudflare Pages)
+## Deploying (Cloudflare Workers)
 
-Build command `npm run build`, output `dist`, env `VITE_API_URL=https://<api-host>/api/v1` and `NODE_VERSION=20`. `public/_redirects` handles client-side routes. Full staging guide: `becho-api/DEPLOY.md`.
+Build command `npm run build`, output `dist`, env `VITE_API_URL=https://<api-host>/api/v1` and `NODE_VERSION=20`. `wrangler.jsonc` serves `dist/` with single-page-app fallback; Cloudflare runs `npx wrangler deploy` after the build. Set `VITE_API_URL` as a *build* variable. Full staging guide: `becho-api/DEPLOY.md`.
