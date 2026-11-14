@@ -43,4 +43,4 @@ which must be listed in the API's `CORS_ORIGINS`.
 
 ## Deploying (Cloudflare Workers)
 
-Build command `npm run build`, output `dist`, env `VITE_API_URL=https://<api-host>/api/v1` and `NODE_VERSION=20`. `wrangler.jsonc` serves `dist/` with single-page-app fallback; Cloudflare runs `npx wrangler deploy` after the build. Set `VITE_API_URL` as a *build* variable. Full staging guide: `becho-api/DEPLOY.md`.
+Build command `npm run build`, output `dist`, `wrangler.jsonc` serves `dist/` with single-page-app fallback; Cloudflare runs `npx wrangler deploy` after the build. The deployed API URL lives in `.env.production`. Full staging guide: `becho-api/DEPLOY.md`.
