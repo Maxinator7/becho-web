@@ -81,12 +81,12 @@ export const MyListings: React.FC = () => {
       </div>
 
       {notice && (
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#10b981', background: 'rgba(16,185,129,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--success)', background: 'rgba(16,185,129,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
           <CheckCircle2 size={18} /> {notice}
         </div>
       )}
       {error && (
-        <div style={{ color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>
+        <div style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>
       )}
 
       {loading ? (
@@ -99,7 +99,7 @@ export const MyListings: React.FC = () => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
           {listings.map((item) => {
-            const status = LISTING_STATUS_LABELS[item.status] ?? { label: item.status, color: '#9ca3af' };
+            const status = LISTING_STATUS_LABELS[item.status] ?? { label: item.status, color: 'var(--text-secondary)' };
             const reasons = item.status === 'PENDING_REVIEW' || item.status === 'REJECTED' ? item.sanitization?.reasons ?? [] : [];
             return (
               <div key={item.id} className="glass-panel" style={{ padding: '1.25rem', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -107,7 +107,7 @@ export const MyListings: React.FC = () => {
                   {item.media && item.media.length > 0 ? (
                     <img src={item.media[0].url} alt={item.title} style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '8px', marginBottom: '1rem' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '180px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                    <div style={{ width: '100%', height: '180px', background: 'var(--surface-2)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
                       No Image
                     </div>
                   )}
@@ -126,7 +126,7 @@ export const MyListings: React.FC = () => {
                   {item.status === 'LIVE' && item.expiresAt && <> · expires {new Date(item.expiresAt).toLocaleDateString('en-IN')}</>}
                 </div>
                 {reasons.length > 0 && (
-                  <div style={{ fontSize: '0.8rem', color: '#f59e0b', marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>
                     Flagged: {reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
                   </div>
                 )}
@@ -140,7 +140,7 @@ export const MyListings: React.FC = () => {
                       className={action === 'delete' ? undefined : 'btn-primary'}
                       style={{
                         padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderRadius: '6px', cursor: 'pointer',
-                        ...(action === 'delete' ? { background: 'transparent', border: '1px solid rgba(239,68,68,0.5)', color: '#ef4444' } : {}),
+                        ...(action === 'delete' ? { background: 'transparent', border: '1px solid rgba(239,68,68,0.5)', color: 'var(--danger)' } : {}),
                       }}
                     >
                       {label}

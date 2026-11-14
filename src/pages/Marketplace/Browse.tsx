@@ -137,9 +137,9 @@ export const Browse: React.FC = () => {
                 width: '100%',
                 padding: '0.65rem 1rem 0.65rem 2.4rem',
                 borderRadius: '8px',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                color: '#fff',
+                background: 'var(--input-bg)',
+                border: '1px solid var(--input-border)',
+                color: 'var(--input-text)',
                 outline: 'none',
                 fontSize: '0.9rem',
               }}
@@ -179,16 +179,16 @@ export const Browse: React.FC = () => {
                   width: '100%',
                   padding: '0.6rem',
                   borderRadius: '8px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#fff',
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--input-border)',
+                  color: 'var(--input-text)',
                   outline: 'none',
                   fontSize: '0.85rem',
                 }}
               >
-                <option value="" style={{ background: '#0f172a' }}>All Categories</option>
+                <option value="" style={{ background: 'var(--option-bg)' }}>All Categories</option>
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id} style={{ background: '#0f172a' }}>
+                  <option key={cat.id} value={cat.id} style={{ background: 'var(--option-bg)' }}>
                     {cat.name}
                   </option>
                 ))}
@@ -213,9 +213,9 @@ export const Browse: React.FC = () => {
                     width: '100%',
                     padding: '0.5rem 0.6rem',
                     borderRadius: '6px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#fff',
+                    background: 'var(--input-bg)',
+                    border: '1px solid var(--input-border)',
+                    color: 'var(--input-text)',
                     outline: 'none',
                     fontSize: '0.85rem',
                   }}
@@ -233,9 +233,9 @@ export const Browse: React.FC = () => {
                     width: '100%',
                     padding: '0.5rem 0.6rem',
                     borderRadius: '6px',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#fff',
+                    background: 'var(--input-bg)',
+                    border: '1px solid var(--input-border)',
+                    color: 'var(--input-text)',
                     outline: 'none',
                     fontSize: '0.85rem',
                   }}
@@ -258,19 +258,19 @@ export const Browse: React.FC = () => {
                   width: '100%',
                   padding: '0.6rem',
                   borderRadius: '8px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#fff',
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--input-border)',
+                  color: 'var(--input-text)',
                   outline: 'none',
                   fontSize: '0.85rem',
                 }}
               >
-                <option value="" style={{ background: '#0f172a' }}>Any Condition</option>
-                <option value="NEW" style={{ background: '#0f172a' }}>Brand New</option>
-                <option value="LIKE_NEW" style={{ background: '#0f172a' }}>Like New</option>
-                <option value="USED" style={{ background: '#0f172a' }}>Used</option>
-                <option value="REFURBISHED" style={{ background: '#0f172a' }}>Refurbished</option>
-                <option value="FOR_PARTS" style={{ background: '#0f172a' }}>For Parts</option>
+                <option value="" style={{ background: 'var(--option-bg)' }}>Any Condition</option>
+                <option value="NEW" style={{ background: 'var(--option-bg)' }}>Brand New</option>
+                <option value="LIKE_NEW" style={{ background: 'var(--option-bg)' }}>Like New</option>
+                <option value="USED" style={{ background: 'var(--option-bg)' }}>Used</option>
+                <option value="REFURBISHED" style={{ background: 'var(--option-bg)' }}>Refurbished</option>
+                <option value="FOR_PARTS" style={{ background: 'var(--option-bg)' }}>For Parts</option>
               </select>
             </div>
           </div>
@@ -292,16 +292,16 @@ export const Browse: React.FC = () => {
                 style={{
                   padding: '0.45rem 0.75rem',
                   borderRadius: '6px',
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  color: '#fff',
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--input-border)',
+                  color: 'var(--input-text)',
                   outline: 'none',
                   fontSize: '0.85rem',
                 }}
               >
-                <option value="newest" style={{ background: '#0f172a' }}>Newest Listed</option>
-                <option value="price_asc" style={{ background: '#0f172a' }}>Price: Low to High</option>
-                <option value="price_desc" style={{ background: '#0f172a' }}>Price: High to Low</option>
+                <option value="newest" style={{ background: 'var(--option-bg)' }}>Newest Listed</option>
+                <option value="price_asc" style={{ background: 'var(--option-bg)' }}>Price: Low to High</option>
+                <option value="price_desc" style={{ background: 'var(--option-bg)' }}>Price: High to Low</option>
               </select>
             </div>
           </div>
@@ -347,7 +347,7 @@ export const Browse: React.FC = () => {
                             top: '10px',
                             left: '10px',
                             background: 'rgba(0,0,0,0.65)',
-                            color: 'var(--accent-primary)',
+                            color: '#c7d2fe', // light indigo: readable on the dark chip in both themes
                             padding: '0.2rem 0.6rem',
                             borderRadius: '12px',
                             fontSize: '0.7rem',
@@ -389,9 +389,9 @@ export const Browse: React.FC = () => {
                     style={{
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#fff',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)',
                       cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
                       opacity: currentPage <= 1 ? 0.5 : 1,
                       display: 'flex',
@@ -413,9 +413,9 @@ export const Browse: React.FC = () => {
                     style={{
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
-                      background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#fff',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text-primary)',
                       cursor: currentPage >= pagination.totalPages ? 'not-allowed' : 'pointer',
                       opacity: currentPage >= pagination.totalPages ? 0.5 : 1,
                       display: 'flex',

@@ -1,0 +1,12 @@
+// Admin portal Worker (separate from the marketplace). Cloudflare build settings for this Worker:
+//   Build command:  npm run build:admin
+//   Deploy command: npx wrangler deploy --config wrangler.admin.jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "becho-admin",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist-admin",
+    "not_found_handling": "single-page-application"
+  }
+}

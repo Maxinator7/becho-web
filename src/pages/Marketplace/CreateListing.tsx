@@ -4,6 +4,8 @@ import { fetchApi } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
 import { PlusCircle, Upload, AlertCircle } from 'lucide-react';
+import { MediaItem, MediaUploader } from '../../components/MediaUploader';
+import { DEFAULT_LIMITS, MediaLimits, getMediaLimits } from '../../utils/media';
 
 interface CategoryNode {
   id: string;
@@ -47,7 +49,8 @@ export const CreateListing: React.FC = () => {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [condition, setCondition] = useState('USED');
-  const [imageUrl, setImageUrl] = useState('');
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [limits, setLimits] = useState<MediaLimits>(DEFAULT_LIMITS);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,10 +76,24 @@ export const CreateListing: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    getMediaLimits().then(setLimits);
+  }, []);
+
+  const uploading = media.some((m) => m.status === 'uploading');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
       setError('You must be signed in to create a listing.');
+      return;
+    }
+    if (uploading) {
+      setError('Please wait for your photos and video to finish uploading.');
+      return;
+    }
+    if (!media.some((m) => m.kind === 'IMAGE' && m.status === 'done')) {
+      setError('Add at least one photo — listings with photos get far more replies.');
       return;
     }
 
@@ -108,7 +125,10 @@ export const CreateListing: React.FC = () => {
       stateCode: area.stateCode,
       cityCode: area.cityCode,
       attributes: attrArray,
-      media: imageUrl ? [{ url: imageUrl.trim() }] : [],
+      // Photos first (the first one is the cover shown in search results), then the video.
+      media: [...media.filter((m) => m.kind === 'IMAGE'), ...media.filter((m) => m.kind === 'VIDEO')]
+        .filter((m) => m.status === 'done' && m.uploadId)
+        .map((m) => ({ uploadId: m.uploadId! })),
     };
 
     const createRes = await fetchApi<{ id: string }>('/listings', {
@@ -148,7 +168,7 @@ export const CreateListing: React.FC = () => {
         </h2>
 
         {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
             <AlertCircle size={18} />
             <span>{error}</span>
           </div>
@@ -164,7 +184,7 @@ export const CreateListing: React.FC = () => {
               required
               value={selectedSubcategoryId}
               onChange={(e) => handleSubcategoryChange(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--select-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
             >
               <option value="">Select Category</option>
               {categories.map((parent) => (
@@ -187,7 +207,7 @@ export const CreateListing: React.FC = () => {
                 placeholder="e.g. iPhone 14 Pro 128GB Space Black"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
               />
             </div>
 
@@ -200,7 +220,7 @@ export const CreateListing: React.FC = () => {
                 placeholder="799.00"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
               />
             </div>
           </div>
@@ -215,7 +235,7 @@ export const CreateListing: React.FC = () => {
                 placeholder="Provide item details, condition notes, and reason for selling..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
               />
             </div>
             <div>
@@ -223,7 +243,7 @@ export const CreateListing: React.FC = () => {
               <select
                 value={condition}
                 onChange={(e) => setCondition(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--select-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
               >
                 <option value="NEW">New</option>
                 <option value="LIKE_NEW">Like New</option>
@@ -238,7 +258,7 @@ export const CreateListing: React.FC = () => {
                 required
                 value={cityCode}
                 onChange={(e) => setCityCode(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: '#1e1e2d', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--select-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
               >
                 {sellingAreas.length === 0 && <option value="">No cities available</option>}
                 {sellingAreas.map((a) => (
@@ -250,7 +270,7 @@ export const CreateListing: React.FC = () => {
 
           {/* Dynamic Category Attributes */}
           {attributes.length > 0 && (
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ background: 'var(--surface-1)', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               <h4 style={{ fontSize: '0.95rem', marginBottom: '1rem', color: 'var(--accent-secondary)' }}>Category Specifications</h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                 {attributes.map((attr) => (
@@ -262,7 +282,7 @@ export const CreateListing: React.FC = () => {
                       <select
                         value={attributeValues[attr.id] || ''}
                         onChange={(e) => setAttributeValues({ ...attributeValues, [attr.id]: e.target.value })}
-                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', background: '#111827', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', background: 'var(--select-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
                       >
                         <option value="">Select {attr.name}</option>
                         {attr.options.map((opt) => (
@@ -274,7 +294,7 @@ export const CreateListing: React.FC = () => {
                         type={attr.dataType === 'NUMBER' ? 'number' : 'text'}
                         value={attributeValues[attr.id] || ''}
                         onChange={(e) => setAttributeValues({ ...attributeValues, [attr.id]: e.target.value })}
-                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                        style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
                       />
                     )}
                   </div>
@@ -283,22 +303,25 @@ export const CreateListing: React.FC = () => {
             </div>
           )}
 
-          {/* Photo / Media URL */}
+          {/* Photos and video */}
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-              Photo URL (Image link)
+              Photos and video *
             </label>
-            <input
-              type="url"
-              placeholder="https://images.unsplash.com/photo-1511707171634-5f897ff02aa9"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-            />
+            <MediaUploader items={media} onChange={setMedia} limits={limits} />
+            {media.some((m) => m.status === 'error') && (
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                Files that failed are skipped. Remove them or add them again.
+              </div>
+            )}
           </div>
 
-          <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', fontSize: '1rem' }}>
-            <Upload size={18} /> {loading ? 'Submitting Listing...' : 'Publish Listing'}
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            You can post up to {limits.listingsPerDay} listings a day.
+          </div>
+
+          <button type="submit" disabled={loading || uploading} className="btn-primary" style={{ width: '100%', padding: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', fontSize: '1rem' }}>
+            <Upload size={18} /> {uploading ? 'Uploading media…' : loading ? 'Submitting Listing...' : 'Publish Listing'}
           </button>
         </form>
       </div>

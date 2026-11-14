@@ -7,8 +7,8 @@ import { ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 interface OtpInfo { verificationMessage: string; devOtp?: string }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)',
-  border: '1px solid rgba(255, 255, 255, 0.1)', color: 'var(--text-primary)', textAlign: 'center', fontSize: '1.25rem', letterSpacing: '4px',
+  width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)',
+  border: '1px solid var(--input-border)', color: 'var(--input-text)', textAlign: 'center', fontSize: '1.25rem', letterSpacing: '4px',
 };
 
 export const VerifyAccount: React.FC = () => {
@@ -64,12 +64,12 @@ export const VerifyAccount: React.FC = () => {
         </p>
 
         {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
             <AlertCircle size={18} /> <span>{error}</span>
           </div>
         )}
         {info?.devOtp && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem' }}>
             <CheckCircle2 size={18} /> <span>Dev mode: your code is <strong>{info.devOtp}</strong></span>
           </div>
         )}

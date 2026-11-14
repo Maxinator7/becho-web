@@ -1,20 +1,48 @@
+/*
+ * Theme tokens. :root holds the dark theme (the default). The light theme is
+ * applied by [data-theme="light"], or by the OS preference when no explicit
+ * theme is set ("system" mode — see src/context/ThemeContext.tsx).
+ */
 :root {
+  color-scheme: dark;
+
   --bg-primary: #090d16;
   --bg-secondary: #111827;
   --bg-card: rgba(17, 24, 39, 0.7);
   --bg-card-hover: rgba(31, 41, 55, 0.8);
-  
+
   --border-color: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-strong: rgba(255, 255, 255, 0.1);
   --border-glow: rgba(99, 102, 241, 0.4);
+
+  /* Translucent fills layered on cards (replace rgba(255,255,255,0.02..0.1)). */
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --surface-sunken: rgba(0, 0, 0, 0.2);
+
+  /* Form controls. --select-bg is opaque so native dropdowns stay readable. */
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --input-border: rgba(255, 255, 255, 0.12);
+  --input-text: #f9fafb;
+  --select-bg: #111827;
+  --option-bg: #0f172a;
+
+  --overlay: rgba(0, 0, 0, 0.7);
+  --shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  --shadow-card: none;
 
   --accent-primary: #6366f1;
   --accent-primary-hover: #4f46e5;
   --accent-secondary: #06b6d4;
   --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-  
+
   --text-primary: #f9fafb;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
+  /* Text on accent/gradient fills: white in both themes. */
+  --text-on-accent: #fff;
 
   --success: #10b981;
   --warning: #f59e0b;
@@ -25,6 +53,96 @@
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 24px;
+}
+
+/* Light theme, explicitly chosen. Keep in sync with the prefers-color-scheme block below. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-primary: #f5f7fb;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-card-hover: #ffffff;
+
+  --border-color: rgba(15, 23, 42, 0.1);
+  --border-subtle: rgba(15, 23, 42, 0.07);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --border-glow: rgba(79, 70, 229, 0.35);
+
+  --surface-1: rgba(15, 23, 42, 0.03);
+  --surface-2: rgba(15, 23, 42, 0.05);
+  --surface-3: rgba(15, 23, 42, 0.08);
+  --surface-sunken: rgba(15, 23, 42, 0.03);
+
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+  --select-bg: #ffffff;
+  --option-bg: #ffffff;
+
+  --overlay: rgba(15, 23, 42, 0.45);
+  --shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  --accent-primary: #4f46e5;
+  --accent-primary-hover: #4338ca;
+  --accent-secondary: #0e7490;
+  --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #9333ea 50%, #db2777 100%);
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #5f6b7f;
+  --text-on-accent: #fff;
+
+  --success: #059669;
+  --warning: #b45309;
+  --danger: #dc2626;
+}
+
+/* "System" mode: follow the OS when the user hasn't forced a theme. Same values as above. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --bg-primary: #f5f7fb;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-card-hover: #ffffff;
+
+    --border-color: rgba(15, 23, 42, 0.1);
+    --border-subtle: rgba(15, 23, 42, 0.07);
+    --border-strong: rgba(15, 23, 42, 0.16);
+    --border-glow: rgba(79, 70, 229, 0.35);
+
+    --surface-1: rgba(15, 23, 42, 0.03);
+    --surface-2: rgba(15, 23, 42, 0.05);
+    --surface-3: rgba(15, 23, 42, 0.08);
+    --surface-sunken: rgba(15, 23, 42, 0.03);
+
+    --input-bg: #ffffff;
+    --input-border: #cbd5e1;
+    --input-text: #0f172a;
+    --select-bg: #ffffff;
+    --option-bg: #ffffff;
+
+    --overlay: rgba(15, 23, 42, 0.45);
+    --shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+    --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+
+    --accent-primary: #4f46e5;
+    --accent-primary-hover: #4338ca;
+    --accent-secondary: #0e7490;
+    --accent-gradient: linear-gradient(135deg, #4f46e5 0%, #9333ea 50%, #db2777 100%);
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #5f6b7f;
+    --text-on-accent: #fff;
+
+    --success: #059669;
+    --warning: #b45309;
+    --danger: #dc2626;
+  }
 }
 
 * {
@@ -47,6 +165,12 @@ a {
   text-decoration: none;
 }
 
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
@@ -60,6 +184,7 @@ button {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
 }
 
 .gradient-text {
@@ -70,7 +195,7 @@ button {
 
 .btn-primary {
   background: var(--accent-gradient);
-  color: #fff;
+  color: var(--text-on-accent);
   font-weight: 600;
   padding: 10px 20px;
   border-radius: var(--radius-sm);
@@ -81,4 +206,8 @@ button {
 .btn-primary:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+}
+
+@keyframes becho-spin {
+  to { transform: rotate(360deg); }
 }

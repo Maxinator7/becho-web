@@ -4,7 +4,7 @@ import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
 import { useAuth } from '../../context/AuthContext';
 import { formatPrice, CONDITION_LABELS, LISTING_STATUS_LABELS } from '../../utils/format';
-import { Heart, MessageSquare, MapPin, Calendar, ShieldCheck, ArrowLeft, Layers, Tag, X, TrendingDown } from 'lucide-react';
+import { Heart, MessageSquare, MapPin, Calendar, ShieldCheck, ArrowLeft, Layers, Tag, X, TrendingDown, Play } from 'lucide-react';
 
 interface ListingDetail {
   id: string;
@@ -27,7 +27,7 @@ interface ListingDetail {
     valueBoolean?: boolean;
     attributeDefinition: { name: string; dataType: string };
   }[];
-  media: { id: string; url: string }[];
+  media: { id: string; url: string; mediaType?: string }[];
 }
 
 interface Offer {
@@ -160,7 +160,7 @@ export const ProductDetails: React.FC = () => {
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <Navbar />
       <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-        <h2 style={{ color: '#ef4444', marginBottom: '1rem' }}>Listing Not Found</h2>
+        <h2 style={{ color: 'var(--danger)', marginBottom: '1rem' }}>Listing Not Found</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{errorMsg || 'This listing does not exist or was removed.'}</p>
         <Link to="/browse" className="btn-primary" style={{ padding: '0.6rem 1.25rem', textDecoration: 'none' }}>Back to Browse</Link>
       </div>
@@ -169,7 +169,8 @@ export const ProductDetails: React.FC = () => {
 
   const images = listing.media && listing.media.length > 0
     ? listing.media
-    : [{ id: 'placeholder', url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800' }];
+    : [{ id: 'placeholder', url: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800', mediaType: 'IMAGE' }];
+  const activeMedia = images[Math.min(activeMediaIndex, images.length - 1)];
 
   const isSeller = user?.id === listing.seller.id;
 
@@ -179,7 +180,7 @@ export const ProductDetails: React.FC = () => {
 
       {/* ── Offer Modal ── */}
       {showOfferModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '2rem', borderRadius: '20px', position: 'relative' }}>
             <button
               onClick={() => { setShowOfferModal(false); setOfferError(''); }}
@@ -210,8 +211,8 @@ export const ProductDetails: React.FC = () => {
                     required
                     style={{
                       width: '100%', padding: '0.75rem 1rem 0.75rem 2rem',
-                      borderRadius: '10px', background: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.12)', color: '#fff',
+                      borderRadius: '10px', background: 'var(--input-bg)',
+                      border: '1px solid var(--input-border)', color: 'var(--input-text)',
                       fontSize: '1.1rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box',
                     }}
                   />
@@ -234,14 +235,14 @@ export const ProductDetails: React.FC = () => {
                   rows={3}
                   style={{
                     width: '100%', padding: '0.75rem 1rem', borderRadius: '10px',
-                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#fff', fontSize: '0.95rem', resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                    background: 'var(--input-bg)', border: '1px solid var(--input-border)',
+                    color: 'var(--input-text)', fontSize: '0.95rem', resize: 'vertical', outline: 'none', boxSizing: 'border-box',
                   }}
                 />
               </div>
 
               {offerError && (
-                <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '0.875rem' }}>
+                <div style={{ padding: '0.75rem 1rem', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: 'var(--danger)', fontSize: '0.875rem' }}>
                   {offerError}
                 </div>
               )}
@@ -269,15 +270,26 @@ export const ProductDetails: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2.5rem' }}>
         {/* Left Column */}
         <div>
-          <div className="glass-panel" style={{ padding: '0.5rem', borderRadius: '16px', overflow: 'hidden', marginBottom: '1rem', background: '#090d16' }}>
-            <img src={images[activeMediaIndex].url} alt={listing.title} style={{ width: '100%', height: '420px', objectFit: 'cover', borderRadius: '12px' }} />
+          <div className="glass-panel" style={{ padding: '0.5rem', borderRadius: '16px', overflow: 'hidden', marginBottom: '1rem', background: 'var(--bg-primary)' }}>
+            {activeMedia.mediaType === 'VIDEO' ? (
+              <video key={activeMedia.id} src={activeMedia.url} controls playsInline preload="metadata" style={{ width: '100%', height: '420px', objectFit: 'contain', borderRadius: '12px', background: '#000' }} />
+            ) : (
+              <img src={activeMedia.url} alt={listing.title} style={{ width: '100%', height: '420px', objectFit: 'contain', borderRadius: '12px' }} />
+            )}
           </div>
 
           {images.length > 1 && (
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
               {images.map((media, idx) => (
-                <button key={media.id} onClick={() => setActiveMediaIndex(idx)} style={{ border: activeMediaIndex === idx ? '2px solid var(--accent-primary)' : '2px solid transparent', borderRadius: '8px', padding: 0, cursor: 'pointer', background: 'none', overflow: 'hidden' }}>
-                  <img src={media.url} alt={`Thumbnail ${idx}`} style={{ width: '70px', height: '70px', objectFit: 'cover' }} />
+                <button key={media.id} onClick={() => setActiveMediaIndex(idx)} aria-label={media.mediaType === 'VIDEO' ? 'Play video' : `Photo ${idx + 1}`} style={{ position: 'relative', flexShrink: 0, border: activeMediaIndex === idx ? '2px solid var(--accent-primary)' : '2px solid transparent', borderRadius: '8px', padding: 0, cursor: 'pointer', background: 'none', overflow: 'hidden' }}>
+                  {media.mediaType === 'VIDEO' ? (
+                    <>
+                      <video src={media.url} muted preload="metadata" style={{ width: '70px', height: '70px', objectFit: 'cover', display: 'block' }} />
+                      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.35)', color: '#fff' }}><Play size={20} fill="#fff" /></span>
+                    </>
+                  ) : (
+                    <img src={media.url} alt="" style={{ width: '70px', height: '70px', objectFit: 'cover', display: 'block' }} />
+                  )}
                 </button>
               ))}
             </div>
@@ -297,7 +309,7 @@ export const ProductDetails: React.FC = () => {
                 {listing.attributes.map((attr) => {
                   const val = attr.valueText || (attr.valueNumber !== undefined ? String(attr.valueNumber) : attr.valueBoolean !== undefined ? (attr.valueBoolean ? 'Yes' : 'No') : 'N/A');
                   return (
-                    <div key={attr.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div key={attr.id} style={{ background: 'var(--surface-1)', padding: '0.85rem 1rem', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{attr.attributeDefinition.name}</div>
                       <div style={{ fontWeight: 600, fontSize: '0.95rem', marginTop: '0.25rem' }}>{val}</div>
                     </div>
@@ -315,7 +327,7 @@ export const ProductDetails: React.FC = () => {
               <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-primary)', borderRadius: '20px', fontWeight: 600 }}>
                 {listing.category?.name || 'General'}
               </span>
-              <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)', borderRadius: '20px' }}>
+              <span style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem', background: 'var(--surface-3)', color: 'var(--text-secondary)', borderRadius: '20px' }}>
                 Condition: {CONDITION_LABELS[listing.condition] ?? listing.condition}
               </span>
             </div>
@@ -328,12 +340,12 @@ export const ProductDetails: React.FC = () => {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingBottom: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                 <MapPin size={16} color="var(--accent-secondary)" /> Location: <strong>{listing.cityCode}, {listing.stateCode}</strong> (Approximate)
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                <Calendar size={16} /> Listed: {new Date(listing.createdAt).toLocaleDateString()}
+                <Calendar size={16} /> Listed: {new Date(listing.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
               </div>
             </div>
 
@@ -342,13 +354,13 @@ export const ProductDetails: React.FC = () => {
               <div style={{
                 padding: '1rem', borderRadius: '10px', marginBottom: '1rem',
                 background: `rgba(${existingOffer.status === 'ACCEPTED' ? '34,197,94' : existingOffer.status === 'REJECTED' ? '239,68,68' : '99,102,241'},0.1)`,
-                border: `1px solid ${STATUS_COLORS[existingOffer.status] || 'rgba(255,255,255,0.1)'}`,
+                border: `1px solid ${STATUS_COLORS[existingOffer.status] || 'var(--border-strong)'}`,
               }}>
                 <div style={{ fontWeight: 700, color: STATUS_COLORS[existingOffer.status], fontSize: '0.95rem', marginBottom: '0.3rem' }}>
                   {existingOffer.proposedById === user?.id ? 'Your offer' : 'Seller counter-offer'}: {formatPrice(existingOffer.amount)} — {existingOffer.status}
                 </div>
                 {existingOffer.status === 'PENDING' && (
-                  <button id="cancel-offer-btn" onClick={handleCancelOffer} style={{ fontSize: '0.78rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  <button id="cancel-offer-btn" onClick={handleCancelOffer} style={{ fontSize: '0.78rem', color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                     Cancel offer
                   </button>
                 )}
@@ -369,7 +381,7 @@ export const ProductDetails: React.FC = () => {
                 </button>
                 <button
                   onClick={handleToggleFavorite}
-                  style={{ padding: '0.85rem', borderRadius: '8px', background: isFavorited ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.05)', border: isFavorited ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)', color: isFavorited ? '#ef4444' : 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ padding: '0.85rem', borderRadius: '8px', background: isFavorited ? 'rgba(239,68,68,0.2)' : 'var(--surface-2)', border: isFavorited ? '1px solid #ef4444' : '1px solid var(--border-strong)', color: isFavorited ? '#ef4444' : 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   title={isFavorited ? 'Remove Favorite' : 'Save Favorite'}
                 >
                   <Heart size={20} fill={isFavorited ? '#ef4444' : 'none'} />
@@ -401,7 +413,7 @@ export const ProductDetails: React.FC = () => {
           <div className="glass-panel" style={{ padding: '1.5rem', borderRadius: '16px' }}>
             <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Seller Information</h4>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.25rem' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-on-accent)' }}>
                 {listing.seller.displayName.charAt(0).toUpperCase()}
               </div>
               <div>

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Shield, Users, MapPin, AlertTriangle, Check, X } from 'lucide-react';
-import { fetchApi } from '../../api/client';
-import { ServiceArea } from '../../components/LocationSelector';
+import { fetchApi } from '../api/client';
+import { ServiceArea } from '../components/LocationSelector';
 
 interface FlaggedListing {
   id: string;
@@ -18,10 +17,15 @@ interface FlaggedListing {
 export const AdminDashboard: React.FC = () => {
   const [serviceAreas, setServiceAreas] = useState<ServiceArea[]>([]);
   const [moderationQueue, setModerationQueue] = useState<FlaggedListing[]>([]);
+  const [liveListings, setLiveListings] = useState<number | null>(null);
 
   const loadData = () => {
     fetchApi<ServiceArea[]>('/locations/service-areas').then((res) => {
       if (res.success && res.data) setServiceAreas(res.data);
+    });
+
+    fetchApi<{ pagination: { total: number } }>('/listings?limit=1').then((res) => {
+      if (res.success && res.data) setLiveListings(res.data.pagination.total);
     });
 
     fetchApi<FlaggedListing[]>('/admin/moderation/queue').then((res) => {
@@ -44,14 +48,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <nav className="glass-panel" style={{ padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-secondary)' }}>
-          BECHO Admin Portal
-        </div>
-        <Link to="/" style={{ color: 'var(--text-secondary)' }}>Back to Marketplace</Link>
-      </nav>
-
+    <div>
       <h1 style={{ marginBottom: '1.5rem' }}>Admin Dashboard</h1>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
@@ -74,8 +71,8 @@ export const AdminDashboard: React.FC = () => {
         <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Users size={32} color="#ec4899" />
           <div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Total Users</div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>Phase 1 Ready</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Live Listings</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{liveListings ?? '—'}</div>
           </div>
         </div>
 
@@ -100,13 +97,13 @@ export const AdminDashboard: React.FC = () => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {moderationQueue.map((item) => (
-              <div key={item.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '1.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div key={item.id} style={{ background: 'var(--surface-1)', padding: '1.25rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                   <div>
                     <h4 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{item.title}</h4>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Seller: {item.seller?.displayName} ({item.seller?.email})</span>
                   </div>
-                  <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', fontWeight: 600 }}>
+                  <span style={{ fontSize: '0.8rem', padding: '2px 8px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.2)', color: 'var(--warning)', fontWeight: 600 }}>
                     Score: {item.sanitization?.score ? (item.sanitization.score * 100).toFixed(0) + '%' : '100%'}
                   </span>
                 </div>
@@ -116,7 +113,7 @@ export const AdminDashboard: React.FC = () => {
                 {item.sanitization?.reasons && item.sanitization.reasons.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                     {item.sanitization.reasons.map((r, i) => (
-                      <span key={i} style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '4px' }}>
+                      <span key={i} style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', borderRadius: '4px' }}>
                         ⚠️ {r}
                       </span>
                     ))}
@@ -127,7 +124,7 @@ export const AdminDashboard: React.FC = () => {
                   <button onClick={() => handleApprove(item.id)} className="btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}>
                     Approve Listing
                   </button>
-                  <button onClick={() => handleReject(item.id)} style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '6px', cursor: 'pointer' }}>
+                  <button onClick={() => handleReject(item.id)} style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: 'var(--danger)', borderRadius: '6px', cursor: 'pointer' }}>
                     Reject
                   </button>
                 </div>
@@ -145,7 +142,7 @@ export const AdminDashboard: React.FC = () => {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-strong)', color: 'var(--text-secondary)' }}>
                 <th style={{ padding: '0.75rem' }}>City</th>
                 <th style={{ padding: '0.75rem' }}>State / Country</th>
                 <th style={{ padding: '0.75rem' }}>Status</th>
@@ -155,7 +152,7 @@ export const AdminDashboard: React.FC = () => {
             </thead>
             <tbody>
               {serviceAreas.map((area) => (
-                <tr key={area.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <tr key={area.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <td style={{ padding: '0.75rem', fontWeight: 600 }}>{area.cityName} ({area.cityCode})</td>
                   <td style={{ padding: '0.75rem', color: 'var(--text-secondary)' }}>{area.stateName}, {area.countryCode}</td>
                   <td style={{ padding: '0.75rem' }}>

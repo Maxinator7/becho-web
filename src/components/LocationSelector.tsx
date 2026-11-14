@@ -43,7 +43,7 @@ export const LocationSelector: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="glass-panel" style={{ position: 'absolute', top: '110%', left: 0, width: '260px', padding: '1rem', zIndex: 100, boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+        <div className="glass-panel" style={{ position: 'absolute', top: '110%', left: 0, width: '260px', padding: '1rem', zIndex: 100, boxShadow: 'var(--shadow)' }}>
           <h4 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Choose your city</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '260px', overflowY: 'auto' }}>
             <button onClick={() => choose(null)} style={optionStyle(!selectedArea)}>All cities</button>

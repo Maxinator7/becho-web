@@ -44,3 +44,11 @@ which must be listed in the API's `CORS_ORIGINS`.
 ## Deploying (Cloudflare Workers)
 
 Build command `npm run build`, output `dist`, `wrangler.jsonc` serves `dist/` with single-page-app fallback; Cloudflare runs `npx wrangler deploy` after the build. The deployed API URL lives in `.env.production`. Full staging guide: `becho-api/DEPLOY.md`.
+
+## Admin portal (separate app)
+
+Staff moderation lives in its own app so it can run on a separate subdomain behind Cloudflare Access.
+
+- `npm run dev:admin` → http://localhost:3001 (the API's `CORS_ORIGINS` must include it)
+- `npm run build:admin` → `dist-admin/`, deployed with `wrangler.admin.jsonc` as the `becho-admin` Worker
+- Only `ADMIN` / `MODERATOR` accounts can sign in. Setup steps: `becho-api/DEPLOY.md` §7.
