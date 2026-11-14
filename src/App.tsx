@@ -15,6 +15,7 @@ import { Register } from './pages/Auth/Register';
 import { VerifyAccount } from './pages/Auth/VerifyAccount';
 import { CreateListing } from './pages/Marketplace/CreateListing';
 import { MyListings } from './pages/Marketplace/MyListings';
+import { AdminRedirect, NotFound } from './pages/NotFound';
 
 export const App: React.FC = () => {
   return (
@@ -34,6 +35,8 @@ export const App: React.FC = () => {
                 <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
                 <Route path="/my-listings" element={<RequireAuth><MyListings /></RequireAuth>} />
                 <Route path="/create-listing" element={<RequireAuth verified><CreateListing /></RequireAuth>} />
+                <Route path="/admin/*" element={<AdminRedirect />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Router>
           </LocationProvider>
