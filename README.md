@@ -40,3 +40,7 @@ which must be listed in the API's `CORS_ORIGINS`.
 - Sessions persist in `localStorage`; expired access tokens are refreshed automatically (`src/api/client.ts`).
 - The city picked in the navbar (`LocationContext`) filters Browse and is the default location for new listings.
 - Prices are shown in INR with Indian digit grouping (`src/utils/format.ts`).
+
+## Deploying (Cloudflare Pages)
+
+Build command `npm run build`, output `dist`, env `VITE_API_URL=https://<api-host>/api/v1` and `NODE_VERSION=20`. `public/_redirects` handles client-side routes. Full staging guide: `becho-api/DEPLOY.md`.
