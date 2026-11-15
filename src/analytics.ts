@@ -29,11 +29,21 @@ export function initAnalytics(app: 'marketplace' | 'admin') {
     .catch(() => null); // blocked by an ad-blocker or offline: carry on without analytics
 }
 
+let identifiedId: string | null = null;
+
+/**
+ * Call with the signed-in user, or null when signed out. Only an actual sign-out (a previously
+ * identified user going away) resets the anonymous id — never the initial "not signed in yet" state,
+ * otherwise every visit would look like a new visitor and campaign attribution would break.
+ */
 export function identifyUser(user: { id: string; userCode?: string; role?: string; status?: string } | null) {
+  if (user && user.id === identifiedId) return;
+  const signingOut = !user && identifiedId !== null;
+  identifiedId = user?.id ?? null;
   void client.then((ph) => {
     if (!ph) return;
     if (user) ph.identify(user.id, { userCode: user.userCode, role: user.role, status: user.status });
-    else ph.reset();
+    else if (signingOut) ph.reset();
   });
 }
 
