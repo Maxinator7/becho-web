@@ -19,9 +19,26 @@ export const ThemeToggle: React.FC = () => {
       onClick={cyclePreference}
       aria-label={title}
       title={title}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '999px', background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0, flexShrink: 0 }}
     >
       <Icon size={16} />
     </button>
+  );
+};
+
+/** Three-way theme switch (system / light / dark) used on the account page. */
+export const ThemeSwitch: React.FC = () => {
+  const { preference, setPreference } = useTheme();
+  return (
+    <div className="seg" role="group" aria-label="Theme">
+      {(['system', 'light', 'dark'] as ThemePreference[]).map((p) => {
+        const { label, Icon } = THEME_OPTIONS[p];
+        return (
+          <button key={p} type="button" aria-pressed={preference === p} aria-label={label} title={label} onClick={() => setPreference(p)}>
+            <Icon size={15} />
+          </button>
+        );
+      })}
+    </div>
   );
 };

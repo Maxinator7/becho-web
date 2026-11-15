@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AdminApp } from './AdminApp';
-import '../index.css';
 import './admin.css';
 import { initAnalytics } from '../analytics';
 

@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { useLocation } from '../../context/LocationContext';
-import { formatPrice, CONDITION_LABELS } from '../../utils/format';
 import { Navbar } from '../../components/Navbar';
-import { VerifiedBadge } from '../../components/VerifiedBadge';
-import { Search, SlidersHorizontal, ChevronRight, MapPin, ArrowUpDown, ChevronLeft, ShieldCheck } from 'lucide-react';
+import { EmptyState, ListingCard, useFavoriteIds } from '../../components/ui';
+import { Search, SlidersHorizontal, ChevronRight, ChevronLeft, ShieldCheck, Check, Navigation, X, SearchX } from 'lucide-react';
 
 interface CategoryNode {
   id: string;
@@ -37,8 +36,9 @@ interface PaginationInfo {
 
 export const Browse: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { selectedArea, areas } = useLocation();
-  const cityName = (code: string) => areas.find((a) => a.cityCode === code)?.cityName ?? code;
+  const { selectedArea, areas, setSelectedArea } = useLocation();
+  const { ids: favoriteIds, toggle: toggleFavorite } = useFavoriteIds();
+  const [showFilters, setShowFilters] = useState(searchParams.get('filters') === '1');
 
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [listings, setListings] = useState<ListingItem[]>([]);
@@ -116,146 +116,138 @@ export const Browse: React.FC = () => {
     setCurrentPage(1);
   };
 
-  return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
-      <Navbar />
+  const activeFilterCount = [minPrice, maxPrice, condition, verifiedOnly ? '1' : ''].filter(Boolean).length;
 
-      {/* Page Title & Search Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: '0.25rem' }}>Discover & Search Listings</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Showing {pagination.total} item{pagination.total !== 1 ? 's' : ''} available near you
-          </p>
+  return (
+    <>
+      <Navbar />
+      <main className="page">
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
+          <div>
+            <div className="overline">Explore</div>
+            <h1 className="page-title">{selectedArea ? `Listings in ${selectedArea.cityName}` : 'All listings'}</h1>
+          </div>
+          <div className="muted" style={{ fontSize: '0.85rem' }} aria-live="polite">
+            {loading ? 'Searching…' : `${pagination.total} item${pagination.total !== 1 ? 's' : ''} available`}
+          </div>
         </div>
 
-        {/* Top Search Bar */}
-        <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '0.5rem', width: '100%', maxWidth: '450px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-            <input
-              type="text"
-              placeholder="Search by title, keyword, brand..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.65rem 1rem 0.65rem 2.4rem',
-                borderRadius: '8px',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--input-border)',
-                color: 'var(--input-text)',
-                outline: 'none',
-                fontSize: '0.9rem',
-              }}
-            />
-          </div>
-          <button type="submit" className="btn-primary" style={{ padding: '0.65rem 1.25rem', fontSize: '0.9rem' }}>
-            Search
+        {/* Search */}
+        <form role="search" onSubmit={handleSearchSubmit} className="searchbar">
+          <Search size={20} />
+          <label htmlFor="browse-search" className="sr-only">Search listings</label>
+          <input
+            id="browse-search"
+            type="search"
+            placeholder="Search by title, keyword, brand…"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+          />
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setShowFilters((v) => !v)}
+            aria-expanded={showFilters}
+            aria-controls="browse-filters"
+            aria-label={activeFilterCount ? `Filters, ${activeFilterCount} active` : 'Filters'}
+            title="Filters"
+            style={activeFilterCount ? { background: 'var(--primary)', color: '#fff' } : undefined}
+          >
+            <SlidersHorizontal size={18} />
           </button>
         </form>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '2rem' }}>
-        {/* Left Sidebar Filters */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="glass-panel" style={{ padding: '1.25rem', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <SlidersHorizontal size={18} color="var(--accent-primary)" /> Filters
-              </h3>
-              <button onClick={handleClearFilters} style={{ background: 'none', border: 'none', color: 'var(--accent-secondary)', fontSize: '0.8rem', cursor: 'pointer' }}>
-                Reset
-              </button>
-            </div>
+        {/* City + category rows */}
+        {areas.length > 0 && (
+          <div className="pill-row" role="group" aria-label="City" style={{ marginTop: '12px' }}>
+            <button type="button" className={`pill${!selectedArea ? ' active' : ''}`} aria-pressed={!selectedArea} onClick={() => { setSelectedArea(null); setCurrentPage(1); }}>
+              All cities
+            </button>
+            {areas.map((a) => {
+              const on = selectedArea?.id === a.id;
+              return (
+                <button key={a.id} type="button" className={`pill${on ? ' active' : ''}`} aria-pressed={on} onClick={() => { setSelectedArea(a); setCurrentPage(1); }}>
+                  {on && <Navigation size={14} />} {a.cityName} {on && <Check size={14} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {categories.length > 0 && (
+          <div className="pill-row" role="group" aria-label="Category" style={{ marginTop: '8px', marginBottom: '18px' }}>
+            <button type="button" className={`pill${!selectedCategoryId ? ' active' : ''}`} aria-pressed={!selectedCategoryId} onClick={() => { setSelectedCategoryId(''); setCurrentPage(1); }}>
+              All categories
+            </button>
+            {categories.map((cat) => {
+              const on = selectedCategoryId === cat.id || !!cat.children?.some((c) => c.id === selectedCategoryId);
+              return (
+                <button key={cat.id} type="button" className={`pill${on ? ' active' : ''}`} aria-pressed={on} onClick={() => { setSelectedCategoryId(cat.id); setCurrentPage(1); }}>
+                  {cat.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-            {/* Category Filter */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
-                Category
-              </label>
-              <select
-                value={selectedCategoryId}
-                onChange={(e) => {
-                  setSelectedCategoryId(e.target.value);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem',
-                  borderRadius: '8px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--input-border)',
-                  color: 'var(--input-text)',
-                  outline: 'none',
-                  fontSize: '0.85rem',
-                }}
-              >
-                <option value="" style={{ background: 'var(--option-bg)' }}>All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id} style={{ background: 'var(--option-bg)' }}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Price Range Filter */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
-                Price Range (₹)
-              </label>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <input
-                  type="number"
-                  placeholder="Min"
-                  value={minPrice}
-                  onChange={(e) => {
-                    setMinPrice(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem 0.6rem',
-                    borderRadius: '6px',
-                    background: 'var(--input-bg)',
-                    border: '1px solid var(--input-border)',
-                    color: 'var(--input-text)',
-                    outline: 'none',
-                    fontSize: '0.85rem',
-                  }}
-                />
-                <span style={{ color: 'var(--text-secondary)' }}>-</span>
-                <input
-                  type="number"
-                  placeholder="Max"
-                  value={maxPrice}
-                  onChange={(e) => {
-                    setMaxPrice(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem 0.6rem',
-                    borderRadius: '6px',
-                    background: 'var(--input-bg)',
-                    border: '1px solid var(--input-border)',
-                    color: 'var(--input-text)',
-                    outline: 'none',
-                    fontSize: '0.85rem',
-                  }}
-                />
+        <div className="browse-layout">
+          {/* Filters: a sidebar on desktop, a collapsible panel on phones */}
+          <aside id="browse-filters" className={`browse-filters card card-pad${showFilters ? ' open' : ''}`} aria-label="Filters">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 className="section-title" style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <SlidersHorizontal size={18} color="var(--primary-text)" /> Filters
+              </h2>
+              <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <button type="button" onClick={handleClearFilters} className="btn btn-ghost btn-sm">Reset</button>
+                <button type="button" onClick={() => setShowFilters(false)} className="icon-btn mobile-only" aria-label="Close filters" style={{ width: 32, height: 32 }}><X size={18} /></button>
               </div>
             </div>
 
-            {/* Verified only */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="browse-verified" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', cursor: 'pointer' }}>
-                <span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.9rem', fontWeight: 600 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label htmlFor="browse-category" className="field-label">Category</label>
+                <select
+                  id="browse-category"
+                  className="input"
+                  value={selectedCategoryId}
+                  onChange={(e) => { setSelectedCategoryId(e.target.value); setCurrentPage(1); }}
+                >
+                  <option value="">All categories</option>
+                  {categories.map((cat) => (
+                    <optgroup key={cat.id} label={cat.name}>
+                      <option value={cat.id}>All in {cat.name}</option>
+                      {cat.children?.map((child) => <option key={child.id} value={child.id}>{child.name}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <span className="field-label" id="browse-price-label">Price range (₹)</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }} role="group" aria-labelledby="browse-price-label">
+                  <input type="number" inputMode="numeric" className="input" placeholder="Min" aria-label="Minimum price" value={minPrice} onChange={(e) => { setMinPrice(e.target.value); setCurrentPage(1); }} />
+                  <span className="muted">–</span>
+                  <input type="number" inputMode="numeric" className="input" placeholder="Max" aria-label="Maximum price" value={maxPrice} onChange={(e) => { setMaxPrice(e.target.value); setCurrentPage(1); }} />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="browse-condition" className="field-label">Condition</label>
+                <select id="browse-condition" className="input" value={condition} onChange={(e) => { setCondition(e.target.value); setCurrentPage(1); }}>
+                  <option value="">Any condition</option>
+                  <option value="NEW">Brand new</option>
+                  <option value="LIKE_NEW">Like new</option>
+                  <option value="USED">Used</option>
+                  <option value="REFURBISHED">Refurbished</option>
+                  <option value="FOR_PARTS">For parts</option>
+                </select>
+              </div>
+
+              <label htmlFor="browse-verified" className="trust-banner" style={{ cursor: 'pointer', padding: '12px' }}>
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     <ShieldCheck size={16} color="var(--success)" /> Verified only
                   </span>
-                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Listings checked by the Becho team</span>
+                  <span className="secondary" style={{ display: 'block', fontSize: '0.76rem' }}>Listings checked by the Becho team</span>
                 </span>
                 <input
                   id="browse-verified"
@@ -264,201 +256,76 @@ export const Browse: React.FC = () => {
                   aria-checked={verifiedOnly}
                   checked={verifiedOnly}
                   onChange={(e) => { setVerifiedOnly(e.target.checked); setCurrentPage(1); }}
-                  style={{ width: '18px', height: '18px', accentColor: 'var(--success)', flexShrink: 0 }}
+                  style={{ width: '20px', height: '20px', accentColor: 'var(--success-fill)', flexShrink: 0 }}
                 />
               </label>
             </div>
+          </aside>
 
-            {/* Condition Filter */}
-            <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
-                Item Condition
+          <div className="browse-main">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <h2 className="section-title" style={{ fontSize: '1rem' }}>{searchQuery ? <>Results for “{searchQuery}”</> : 'Newest first'}</h2>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem' }} className="muted">
+                Sort
+                <select
+                  className="input"
+                  value={sortOrder}
+                  onChange={(e) => { setSortOrder(e.target.value); setCurrentPage(1); }}
+                  style={{ minHeight: '36px', padding: '6px 32px 6px 10px', fontSize: '0.85rem', width: 'auto', fontWeight: 600, color: 'var(--text-primary)' }}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="price_asc">Price: low to high</option>
+                  <option value="price_desc">Price: high to low</option>
+                </select>
               </label>
-              <select
-                value={condition}
-                onChange={(e) => {
-                  setCondition(e.target.value);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.6rem',
-                  borderRadius: '8px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--input-border)',
-                  color: 'var(--input-text)',
-                  outline: 'none',
-                  fontSize: '0.85rem',
-                }}
+            </div>
+
+            {loading ? (
+              <div className="muted" style={{ padding: '48px 0', textAlign: 'center' }}>Loading listings…</div>
+            ) : listings.length === 0 ? (
+              <EmptyState
+                icon={<SearchX size={24} />}
+                title="No listings found"
+                action={<button type="button" onClick={handleClearFilters} className="btn-primary">Clear all filters</button>}
               >
-                <option value="" style={{ background: 'var(--option-bg)' }}>Any Condition</option>
-                <option value="NEW" style={{ background: 'var(--option-bg)' }}>Brand New</option>
-                <option value="LIKE_NEW" style={{ background: 'var(--option-bg)' }}>Like New</option>
-                <option value="USED" style={{ background: 'var(--option-bg)' }}>Used</option>
-                <option value="REFURBISHED" style={{ background: 'var(--option-bg)' }}>Refurbished</option>
-                <option value="FOR_PARTS" style={{ background: 'var(--option-bg)' }}>For Parts</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div>
-          {/* Controls Bar: Sort Selector & View Options */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <ArrowUpDown size={16} color="var(--text-secondary)" />
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Sort by:</span>
-              <select
-                value={sortOrder}
-                onChange={(e) => {
-                  setSortOrder(e.target.value);
-                  setCurrentPage(1);
-                }}
-                style={{
-                  padding: '0.45rem 0.75rem',
-                  borderRadius: '6px',
-                  background: 'var(--input-bg)',
-                  border: '1px solid var(--input-border)',
-                  color: 'var(--input-text)',
-                  outline: 'none',
-                  fontSize: '0.85rem',
-                }}
-              >
-                <option value="newest" style={{ background: 'var(--option-bg)' }}>Newest Listed</option>
-                <option value="price_asc" style={{ background: 'var(--option-bg)' }}>Price: Low to High</option>
-                <option value="price_desc" style={{ background: 'var(--option-bg)' }}>Price: High to Low</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Listings Grid */}
-          {loading ? (
-            <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading marketplace listings...</div>
-          ) : listings.length === 0 ? (
-            <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>No Listings Found</h3>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-                Try adjusting your search keywords, category selection, or price filters.
-              </p>
-              <button onClick={handleClearFilters} className="btn-primary" style={{ padding: '0.5rem 1.25rem' }}>
-                Clear All Filters
-              </button>
-            </div>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-                {listings.map((item) => {
-                  const thumb = item.media && item.media.length > 0 ? item.media[0].url : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500';
-                  return (
-                    <Link
-                      key={item.id}
-                      to={`/listings/${item.id}`}
-                      className="glass-panel"
-                      style={{
-                        textDecoration: 'none',
-                        color: 'inherit',
-                        borderRadius: '16px',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                      }}
-                    >
-                      <div style={{ position: 'relative', height: '170px' }}>
-                        <img src={thumb} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        <span
-                          style={{
-                            position: 'absolute',
-                            top: '10px',
-                            left: '10px',
-                            background: 'rgba(0,0,0,0.65)',
-                            color: '#c7d2fe', // light indigo: readable on the dark chip in both themes
-                            padding: '0.2rem 0.6rem',
-                            borderRadius: '12px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            backdropFilter: 'blur(4px)',
-                          }}
-                        >
-                          {item.category?.name || 'General'}
-                        </span>
-                        {item.verifiedAt && <VerifiedBadge overlay style={{ position: 'absolute', top: '10px', right: '10px' }} />}
-                      </div>
-
-                      <div style={{ padding: '1.15rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.4rem', lineHeight: '1.35', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.title}
-                        </h3>
-
-                        <div style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '0.75rem' }}>
-                          {formatPrice(item.price)}
-                        </div>
-
-                        <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <MapPin size={12} color="var(--accent-secondary)" /> {cityName(item.cityCode)}
-                          </span>
-                          <span>{CONDITION_LABELS[item.condition] ?? item.condition}</span>
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-
-              {/* Pagination Controls */}
-              {pagination.totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '2rem' }}>
-                  <button
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      borderRadius: '8px',
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border-strong)',
-                      color: 'var(--text-primary)',
-                      cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
-                      opacity: currentPage <= 1 ? 0.5 : 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <ChevronLeft size={16} /> Previous
-                  </button>
-
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                    Page <strong>{pagination.page}</strong> of <strong>{pagination.totalPages}</strong>
-                  </span>
-
-                  <button
-                    disabled={currentPage >= pagination.totalPages}
-                    onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      borderRadius: '8px',
-                      background: 'var(--surface-2)',
-                      border: '1px solid var(--border-strong)',
-                      color: 'var(--text-primary)',
-                      cursor: currentPage >= pagination.totalPages ? 'not-allowed' : 'pointer',
-                      opacity: currentPage >= pagination.totalPages ? 0.5 : 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.35rem',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    Next <ChevronRight size={16} />
-                  </button>
+                Try different keywords, another category or city, or a wider price range.
+              </EmptyState>
+            ) : (
+              <>
+                <div className="listing-grid">
+                  {listings.map((item) => (
+                    <ListingCard key={item.id} item={item} favorited={favoriteIds.has(item.id)} onToggleFavorite={toggleFavorite} />
+                  ))}
                 </div>
-              )}
-            </>
-          )}
+
+                {pagination.totalPages > 1 && (
+                  <nav aria-label="Pages" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '24px' }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      <ChevronLeft size={16} /> Previous
+                    </button>
+                    <span className="secondary" style={{ fontSize: '0.85rem' }}>
+                      Page <strong>{pagination.page}</strong> of <strong>{pagination.totalPages}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={currentPage >= pagination.totalPages}
+                      onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                    >
+                      Next <ChevronRight size={16} />
+                    </button>
+                  </nav>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 };

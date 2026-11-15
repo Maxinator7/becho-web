@@ -1,105 +1,39 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Lock, Search, Users as UsersIcon, X } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, Lock, MousePointerClick, Users as UsersIcon, X } from 'lucide-react';
 import { fetchApi } from '../../api/client';
-import type { AdminUserRow, Pagination as PaginationT } from '../types';
-import {
-  Card, EmptyState, ErrorBanner, Loading, PageHeader, Pagination, Pill, UserStatusPill, apiError, fmtDate, fmtNum, fmtPhone,
-  humanize, inputStyle, qs, selectStyle, timeAgo, useDebounced,
-} from '../ui';
-
-export const isLocked = (lockedUntil: string | null | undefined) => !!lockedUntil && new Date(lockedUntil).getTime() > Date.now();
-
-/** Search box bound to the `search` URL param, debounced so typing doesn't spam the API. */
-export const SearchBox: React.FC<{ placeholder: string; label: string }> = ({ placeholder, label }) => {
-  const [params, setParams] = useSearchParams();
-  const urlValue = params.get('search') ?? '';
-  const [value, setValue] = useState(urlValue);
-  const debounced = useDebounced(value, 300);
-
-  useEffect(() => {
-    // Keep the box in sync when the URL changes from elsewhere (back button, clear filters).
-    // Skip echoes of our own debounced write so in-progress typing isn't clobbered.
-    if (urlValue !== debounced.trim()) setValue(urlValue);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlValue]);
-
-  useEffect(() => {
-    if (debounced.trim() === urlValue) return;
-    setParams((p) => {
-      const next = new URLSearchParams(p);
-      if (debounced.trim()) next.set('search', debounced.trim());
-      else next.delete('search');
-      next.delete('page');
-      return next;
-    }, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced]);
-
-  return (
-    <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 200, maxWidth: 420 }}>
-      <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-      <input
-        type="search"
-        aria-label={label}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        style={{ ...inputStyle, paddingLeft: '2.1rem', paddingRight: value ? '2rem' : undefined }}
-      />
-      {value && (
-        <button className="adm-btn" aria-label="Clear search" onClick={() => setValue('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex' }}>
-          <X size={15} />
-        </button>
-      )}
-    </div>
-  );
-};
-
-/** A <select> bound to a URL param; changing it resets to page 1. */
-export const ParamSelect: React.FC<{ name: string; label: string; options: [string, string][]; allLabel?: string; defaultValue?: string }> = ({ name, label, options, allLabel, defaultValue = '' }) => {
-  const [params, setParams] = useSearchParams();
-  return (
-    <select
-      aria-label={label}
-      value={params.get(name) ?? defaultValue}
-      onChange={(e) =>
-        setParams((p) => {
-          const next = new URLSearchParams(p);
-          if (e.target.value && e.target.value !== defaultValue) next.set(name, e.target.value);
-          else next.delete(name);
-          next.delete('page');
-          return next;
-        })
-      }
-      style={selectStyle}
-    >
-      {allLabel !== undefined && <option value="">{allLabel}</option>}
-      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-    </select>
-  );
-};
-
-export const usePageParam = (): [number, (p: number) => void] => {
-  const [params, setParams] = useSearchParams();
-  const page = Math.max(1, Number(params.get('page')) || 1);
-  return [page, (p) => setParams((prev) => { const n = new URLSearchParams(prev); if (p > 1) n.set('page', String(p)); else n.delete('page'); return n; })];
-};
+import type { AdminUserRow, Analytics, Pagination as PaginationT } from '../types';
+import { Button, Card, CopyButton, EmptyState, ErrorBanner, Loading, PageHeader, Pagination, Pill, UserStatusPill, apiError, fmtNum, fmtPhone, humanize, initials, qs } from '../ui';
+import { ParamSelect, SearchBox, isLocked, usePageParam } from '../filters';
+import { UserPanel } from './UserPanel';
 
 const PAGE_SIZE = 25;
 
+const HeaderStat: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode; tone?: 'danger' | 'success' }> = ({ label, value, hint, tone }) => (
+  <div className="a-kpi" style={{ padding: '12px 14px', minWidth: 130 }}>
+    <span className="a-kpi__label" style={{ fontSize: 12 }}>{label}</span>
+    <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums', color: tone === 'danger' ? 'var(--a-danger-text)' : undefined }}>{value}</span>
+    {hint && <span className="a-small" style={{ color: tone === 'success' ? 'var(--a-success-text)' : 'var(--a-text-2)', fontWeight: 600 }}>{hint}</span>}
+  </div>
+);
+
 export const UsersPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { id: selectedId } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
   const [page, setPage] = usePageParam();
   const [users, setUsers] = useState<AdminUserRow[] | null>(null);
   const [pagination, setPagination] = useState<PaginationT | null>(null);
+  const [totals, setTotals] = useState<Analytics['totals']['users'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [reload, setReload] = useState(0);
 
   const search = params.get('search') ?? '';
   const status = params.get('status') ?? '';
   const role = params.get('role') ?? '';
+  const verified = params.get('verified') ?? '';
   const sort = params.get('sort') ?? 'newest';
   const query = qs({ search, status, role, sort, page, limit: PAGE_SIZE });
 
@@ -116,80 +50,158 @@ export const UsersPage: React.FC = () => {
       } else setError(apiError(res, 'Could not load users'));
     });
     return () => { cancelled = true; };
-  }, [query]);
+  }, [query, reload]);
 
-  const hasFilters = !!(search || status || role);
+  const loadTotals = useCallback(() => {
+    fetchApi<Analytics>('/admin/analytics?days=30').then((res) => res.success && res.data && setTotals(res.data.totals.users));
+  }, []);
+  useEffect(loadTotals, [loadTotals]);
+
+  // Verification filter is applied to the current page (the API has no verification filter).
+  const shown = users?.filter((u) =>
+    verified === 'both' ? !!u.emailVerifiedAt && !!u.phoneVerifiedAt : verified === 'missing' ? !u.emailVerifiedAt || !u.phoneVerifiedAt : true,
+  );
+
+  const hasFilters = !!(search || status || role || verified);
+  const open = (id: string) => navigate({ pathname: `/users/${id}`, search: location.search });
+  const close = () => navigate({ pathname: '/users', search: location.search });
+  const blocked = totals ? (totals.byStatus.SUSPENDED ?? 0) + (totals.byStatus.BANNED ?? 0) : 0;
 
   return (
     <div>
-      <PageHeader title="Users" subtitle={pagination ? `${fmtNum(pagination.total)} account${pagination.total === 1 ? '' : 's'}${hasFilters ? ' match' : ''}` : 'Search and manage accounts'} />
-      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
-        <SearchBox label="Search users" placeholder="Name, email, mobile or user code" />
-        <ParamSelect name="status" label="Status" allLabel="All statuses" options={[['ACTIVE', 'Active'], ['PENDING_VERIFICATION', 'Unverified'], ['SUSPENDED', 'Suspended'], ['BANNED', 'Banned']]} />
-        <ParamSelect name="role" label="Role" allLabel="All roles" options={[['USER', 'User'], ['MODERATOR', 'Moderator'], ['ADMIN', 'Admin']]} />
-        <ParamSelect name="sort" label="Sort" defaultValue="newest" options={[['newest', 'Newest first'], ['oldest', 'Oldest first'], ['last_login', 'Recently signed in'], ['name', 'Name A–Z']]} />
-        {hasFilters && (
-          <button className="adm-btn adm-link" style={{ fontSize: '0.85rem' }} onClick={() => setParams(sort !== 'newest' ? { sort } : {})}>
-            Clear filters
-          </button>
-        )}
+      <PageHeader
+        overline="Trust & safety"
+        title="User management & verification"
+        subtitle="Search any account by user code, mobile, email or name. Open a user to review their checks, history and notes."
+        actions={
+          totals && (
+            <div className="a-row" style={{ gap: 10, alignItems: 'stretch' }}>
+              <HeaderStat label="Total users" value={fmtNum(totals.total)} hint={`+${fmtNum(totals.newInPeriod)} in 30 days`} tone="success" />
+              <HeaderStat label="Active" value={fmtNum(totals.active)} hint={`${totals.total ? Math.round((totals.active / totals.total) * 100) : 0}% of accounts`} />
+              <HeaderStat label="Unverified" value={fmtNum(totals.byStatus.PENDING_VERIFICATION ?? 0)} hint="pending verification" />
+              <HeaderStat label="Suspended / banned" value={fmtNum(blocked)} hint={blocked ? 'blocked accounts' : 'none'} tone={blocked ? 'danger' : undefined} />
+            </div>
+          )
+        }
+      />
+
+      <div className="a-md">
+        <div className="a-stack" style={{ minWidth: 0 }}>
+          <Card>
+            <div className="a-toolbar">
+              <SearchBox label="Search users" placeholder="Search by user code (BCH-…), mobile, email or name" width={340} />
+            </div>
+            <div className="a-toolbar" style={{ marginTop: 12 }}>
+              <span className="a-small a-text-2" style={{ fontWeight: 600 }}>Filter by:</span>
+              <ParamSelect name="verified" label="Verification" allLabel="Verification: all" options={[['both', 'Email & mobile verified'], ['missing', 'Missing a verification']]} />
+              <ParamSelect name="status" label="Status" allLabel="Status: all accounts" options={[['ACTIVE', 'Active'], ['PENDING_VERIFICATION', 'Unverified'], ['SUSPENDED', 'Suspended'], ['BANNED', 'Banned']]} />
+              <ParamSelect name="role" label="Role" allLabel="Role: all" options={[['USER', 'User'], ['MODERATOR', 'Moderator'], ['ADMIN', 'Admin']]} />
+              <ParamSelect name="sort" label="Sort" defaultValue="newest" options={[['newest', 'Newest first'], ['oldest', 'Oldest first'], ['last_login', 'Recently signed in'], ['name', 'Name A–Z']]} />
+              {hasFilters && (
+                <Button variant="ghost" small icon={<X size={14} />} onClick={() => setParams(sort !== 'newest' ? { sort } : {})}>Clear filters</Button>
+              )}
+            </div>
+            {verified && <div className="a-small a-muted" style={{ marginTop: 8 }}>Verification filter applies to the users on this page.</div>}
+          </Card>
+
+          {error && <ErrorBanner message={error} />}
+
+          <Card flush>
+            {!users && loading ? (
+              <Loading />
+            ) : shown && shown.length === 0 ? (
+              <EmptyState icon={<UsersIcon size={30} />} title="No users found">{hasFilters ? 'Try a different search or clear the filters.' : 'No accounts yet.'}</EmptyState>
+            ) : (
+              <div className="a-table-wrap" style={{ opacity: loading ? 0.6 : 1 }}>
+                <table className="a-table a-table--dense">
+                  <thead>
+                    <tr>
+                      <th>User &amp; code</th>
+                      <th>Contact &amp; verification</th>
+                      <th className="a-th-num">Listings</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown?.map((u) => (
+                      <tr
+                        key={u.id}
+                        className="a-tr-link"
+                        tabIndex={0}
+                        aria-selected={u.id === selectedId}
+                        onClick={() => open(u.id)}
+                        onKeyDown={(e) => e.key === 'Enter' && open(u.id)}
+                      >
+                        <td style={{ minWidth: 180 }}>
+                          <div className="a-row" style={{ gap: 10, flexWrap: 'nowrap' }}>
+                            <span className={`a-avatar${u.role === 'USER' ? ' a-avatar--soft' : ''}`} aria-hidden>{initials(u.displayName)}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <div className="a-row" style={{ gap: 4, fontWeight: 700, flexWrap: 'nowrap' }}>
+                                <span className="a-ellipsis">{u.displayName}</span>
+                                {isLocked(u.lockedUntil) && (
+                                  <span title={`Sign-in locked until ${new Date(u.lockedUntil!).toLocaleTimeString('en-IN')}`} aria-label="Sign-in locked" style={{ color: 'var(--a-warning-text)', display: 'inline-flex' }}>
+                                    <Lock size={13} />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="a-row" style={{ gap: 2 }} onClick={(e) => e.stopPropagation()}>
+                                <span className="a-chip a-chip--mono" style={{ padding: '0 6px' }}>{u.userCode}</span>
+                                <CopyButton value={u.userCode} label="Copy user code" />
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="a-stack" style={{ gap: 2 }}>
+                            <span className="a-row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                              <span style={{ whiteSpace: 'nowrap' }}>{fmtPhone(u.phone)}</span>
+                              {u.phone && (
+                                <span className={`a-check ${u.phoneVerifiedAt ? 'a-check--ok' : 'a-check--no'}`} title={u.phoneVerifiedAt ? 'Mobile verified' : 'Mobile not verified'}>
+                                  {u.phoneVerifiedAt ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}<span className="a-sr">{u.phoneVerifiedAt ? 'verified' : 'not verified'}</span>
+                                </span>
+                              )}
+                            </span>
+                            <span className="a-row a-small a-text-2" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                              <span className="a-ellipsis" style={{ maxWidth: 170 }} title={u.email ?? ''}>{u.email ?? '—'}</span>
+                              {u.email && (
+                                <span className={`a-check ${u.emailVerifiedAt ? 'a-check--ok' : 'a-check--no'}`} title={u.emailVerifiedAt ? 'Email verified' : 'Email not verified'}>
+                                  {u.emailVerifiedAt ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}<span className="a-sr">{u.emailVerifiedAt ? 'verified' : 'not verified'}</span>
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="a-td-num">
+                          <div style={{ fontWeight: 600 }}>{fmtNum(u._count.listings)}</div>
+                        </td>
+                        <td>
+                          <div className="a-stack" style={{ gap: 4, alignItems: 'flex-start' }}>
+                            <UserStatusPill status={u.status} />
+                            {u.role !== 'USER' && <Pill tone="accent">{humanize(u.role)}</Pill>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <Pagination pagination={pagination} onPage={setPage} noun="users" />
+          </Card>
+        </div>
+
+        <aside className="a-md__panel" aria-label="User profile">
+          {selectedId ? (
+            <UserPanel id={selectedId} onClose={close} onChanged={() => { setReload((n) => n + 1); loadTotals(); }} />
+          ) : (
+            <Card className="a-md__placeholder">
+              <EmptyState icon={<MousePointerClick size={28} />} title="Select a user">
+                Pick a row to see identity checks, listings, the audit timeline and staff notes.
+              </EmptyState>
+            </Card>
+          )}
+        </aside>
       </div>
-      {error && <div style={{ marginBottom: '1rem' }}><ErrorBanner message={error} /></div>}
-      <Card padding="0.5rem 0.75rem 0.85rem">
-        {!users && loading ? (
-          <Loading />
-        ) : users && users.length === 0 ? (
-          <EmptyState icon={<UsersIcon size={30} />} title="No users found">{hasFilters ? 'Try a different search or clear the filters.' : 'No accounts yet.'}</EmptyState>
-        ) : (
-          <div className="adm-table-wrap" style={{ opacity: loading ? 0.6 : 1 }}>
-            <table className="adm-table">
-              <thead>
-                <tr>
-                  <th>User code</th>
-                  <th>Name / email</th>
-                  <th>Mobile</th>
-                  <th>Status</th>
-                  <th>Role</th>
-                  <th className="adm-num">Listings</th>
-                  <th>Joined</th>
-                  <th>Last sign-in</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users?.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="adm-row"
-                    tabIndex={0}
-                    onClick={() => navigate(`/users/${u.id}`)}
-                    onKeyDown={(e) => e.key === 'Enter' && navigate(`/users/${u.id}`)}
-                  >
-                    <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>{u.userCode}</td>
-                    <td style={{ maxWidth: 260 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                        {u.displayName}
-                        {isLocked(u.lockedUntil) && (
-                          <span title={`Sign-in locked until ${new Date(u.lockedUntil!).toLocaleTimeString('en-IN')}`} aria-label="Sign-in locked" style={{ color: 'var(--warning)', display: 'inline-flex' }}>
-                            <Lock size={13} />
-                          </span>
-                        )}
-                      </span>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={u.email ?? ''}>{u.email ?? '—'}</div>
-                    </td>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{fmtPhone(u.phone)}</td>
-                    <td><UserStatusPill status={u.status} /></td>
-                    <td>{u.role === 'USER' ? <span style={{ color: 'var(--text-secondary)' }}>User</span> : <Pill tone="accent">{humanize(u.role)}</Pill>}</td>
-                    <td className="adm-num">{fmtNum(u._count.listings)}</td>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{fmtDate(u.createdAt)}</td>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)' }} title={u.lastLoginAt ?? ''}>{timeAgo(u.lastLoginAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Pagination pagination={pagination} onPage={setPage} noun="users" />
-      </Card>
     </div>
   );
 };

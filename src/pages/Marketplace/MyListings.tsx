@@ -1,17 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
-import { Navbar } from '../../components/Navbar';
-import { formatPrice, LISTING_STATUS_LABELS, REVIEW_ACTION_LABELS } from '../../utils/format';
-import { ShoppingBag, PlusCircle, CheckCircle2, MessageSquareWarning, Pencil } from 'lucide-react';
-import { VerifiedBadge } from '../../components/VerifiedBadge';
+import { formatPrice, REVIEW_ACTION_LABELS, timeAgo } from '../../utils/format';
+import { AlertTriangle, ArrowRight, CheckCircle2, Hourglass, MessageSquareWarning, Pencil, Plus, Tag } from 'lucide-react';
+import { EmptyState, StatusChip } from '../../components/ui';
 
-interface ListingItem {
+export interface MyListingItem {
   id: string;
   title: string;
   price: number;
   status: string;
   createdAt: string;
+  updatedAt?: string;
   expiresAt?: string | null;
   category?: { name: string };
   media?: { url: string }[];
@@ -42,26 +42,39 @@ const REASON_LABELS: Record<string, string> = {
   MISSING_REQUIRED_INFORMATION: 'description is too short',
 };
 
-export const MyListings: React.FC = () => {
+/** Status tabs: each groups one or more listing statuses. */
+const TABS: { id: string; label: string; statuses: string[] | null; countTone?: 'warn' | 'danger' }[] = [
+  { id: 'all', label: 'All', statuses: null },
+  { id: 'live', label: 'Live', statuses: ['LIVE', 'RESERVED'] },
+  { id: 'review', label: 'Under review', statuses: ['PENDING_REVIEW'], countTone: 'warn' },
+  { id: 'changes', label: 'Changes requested', statuses: ['CHANGES_REQUESTED', 'REJECTED', 'SUSPENDED'], countTone: 'danger' },
+  { id: 'drafts', label: 'Drafts', statuses: ['DRAFT'] },
+  { id: 'sold', label: 'Sold', statuses: ['SOLD'] },
+  { id: 'expired', label: 'Expired', statuses: ['EXPIRED'] },
+];
+
+/** The seller's listings with status tabs, staff remarks and actions (part of the account page). */
+export const MyListingsPanel: React.FC<{
+  listings: MyListingItem[];
+  loading: boolean;
+  reload: () => void;
+  notice?: string;
+}> = ({ listings, loading, reload, notice }) => {
   const navigate = useNavigate();
-  const notice = ((useRouterLocation().state || {}) as { notice?: string }).notice;
-  const [listings, setListings] = useState<ListingItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState('all');
 
-  const load = () =>
-    fetchApi<ListingItem[]>('/listings/mine')
-      .then((res) => {
-        if (res.success && res.data) setListings(res.data);
-      })
-      .finally(() => setLoading(false));
+  const counts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const t of TABS) out[t.id] = t.statuses ? listings.filter((l) => t.statuses!.includes(l.status)).length : listings.length;
+    return out;
+  }, [listings]);
+  const visibleTabs = TABS.filter((t) => t.id === 'all' || counts[t.id] > 0);
+  const activeTab = visibleTabs.find((t) => t.id === tab) ?? visibleTabs[0];
+  const shown = activeTab.statuses ? listings.filter((l) => activeTab.statuses!.includes(l.status)) : listings;
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const runAction = async (item: ListingItem, action: Action, confirmText?: string) => {
+  const runAction = async (item: MyListingItem, action: Action, confirmText?: string) => {
     if (action === 'edit') {
       navigate(`/listings/${item.id}/edit`);
       return;
@@ -74,118 +87,129 @@ export const MyListings: React.FC = () => {
       : await fetchApi(`/listings/${item.id}/${action}`, { method: 'POST' });
     setBusyId(null);
     if (!res.success) setError(res.error?.message || 'Something went wrong');
-    load();
+    reload();
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
-      <Navbar />
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShoppingBag size={24} color="var(--accent-primary)" /> My Listings
-        </h1>
-        <Link to="/create-listing" className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}>
-          <PlusCircle size={16} /> Post New Listing
-        </Link>
+    <section aria-labelledby="my-listings-title" id="my-listings">
+      <div className="section-head" style={{ alignItems: 'center' }}>
+        <h2 id="my-listings-title" className="section-title">My listings</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span className="overline">{listings.length} total</span>
+          <Link to="/create-listing" className="btn-primary btn-sm desktop-only"><Plus size={16} /> Post an ad</Link>
+        </div>
       </div>
 
       {notice && (
-        <div role="status" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--success)', background: 'color-mix(in srgb, var(--success) 12%, transparent)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-          <CheckCircle2 size={18} /> {notice}
+        <div role="status" className="trust-banner" style={{ marginBottom: '12px', padding: '10px 12px', fontSize: '0.9rem', color: 'var(--success)' }}>
+          <CheckCircle2 size={18} style={{ flexShrink: 0 }} /> {notice}
         </div>
       )}
-      {error && (
-        <div role="alert" style={{ color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>
+      {error && <div role="alert" className="remark-box danger" style={{ color: 'var(--danger)', marginBottom: '12px' }}>{error}</div>}
+
+      {listings.length > 0 && (
+        <div className="pill-row" role="tablist" aria-label="Listing status" style={{ marginBottom: '12px' }}>
+          {visibleTabs.map((t) => (
+            <button key={t.id} type="button" role="tab" className="tab-pill" aria-selected={activeTab.id === t.id} onClick={() => setTab(t.id)}>
+              {t.label} <span className={`count${t.countTone && counts[t.id] > 0 ? ` ${t.countTone}` : ''}`}>{counts[t.id]}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {loading ? (
-        <p style={{ color: 'var(--text-secondary)' }}>Loading your listings...</p>
+        <p className="muted" style={{ padding: '24px 0' }}>Loading your listings…</p>
       ) : listings.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>You haven't posted anything yet.</p>
-          <Link to="/create-listing" className="btn-primary" style={{ padding: '0.6rem 1.25rem' }}>Sell your first item</Link>
-        </div>
+        <EmptyState icon={<Tag size={24} />} title="You haven't posted anything yet" action={<Link to="/create-listing" className="btn-primary"><Plus size={16} /> Sell your first item</Link>}>
+          Post photos, set a price and chat with buyers near you.
+        </EmptyState>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-          {listings.map((item) => {
-            const status = LISTING_STATUS_LABELS[item.status] ?? { label: item.status, color: 'var(--text-secondary)' };
+        <div role="tabpanel" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {shown.map((item) => {
             const review = item.reviews?.[0];
-            const remarkColor = item.status === 'REJECTED' || item.status === 'SUSPENDED' ? 'var(--danger)' : item.status === 'CHANGES_REQUESTED' ? 'var(--warning)' : 'var(--accent-primary)';
+            const tone = item.status === 'REJECTED' || item.status === 'SUSPENDED' || item.status === 'CHANGES_REQUESTED' ? 'danger' : item.status === 'PENDING_REVIEW' ? 'warn' : 'info';
+            const toneColor = tone === 'danger' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : 'var(--primary-text)';
             const reasons = item.status === 'PENDING_REVIEW' || item.status === 'REJECTED' ? item.sanitization?.reasons ?? [] : [];
+            const sold = item.status === 'SOLD';
+            const actions = ACTIONS_BY_STATUS[item.status] ?? [];
             return (
-              <div key={item.id} className="glass-panel" style={{ padding: '1.25rem', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <Link to={`/listings/${item.id}`}>
-                  {item.media && item.media.length > 0 ? (
-                    <img src={item.media[0].url} alt={item.title} style={{ width: '100%', height: '180px', objectFit: 'cover', borderRadius: '8px', marginBottom: '1rem' }} />
-                  ) : (
-                    <div style={{ width: '100%', height: '180px', background: 'var(--surface-2)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-                      No Image
+              <article key={item.id} className="card my-row">
+                <div className="my-row-top">
+                  <Link to={`/listings/${item.id}`} style={{ position: 'relative', flexShrink: 0 }} aria-label={item.title}>
+                    {item.media && item.media.length > 0 ? (
+                      <img src={item.media[0].url} alt="" style={sold ? { filter: 'grayscale(0.7) brightness(0.8)' } : undefined} />
+                    ) : (
+                      <span className="noimg" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Tag size={22} color="var(--text-muted)" /></span>
+                    )}
+                    {sold && <span className="chip chip-photo chip-upper" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>Sold</span>}
+                  </Link>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <StatusChip status={item.status} verified={!!item.verifiedAt} />
+                      <span className="muted" style={{ fontSize: '0.74rem', whiteSpace: 'nowrap' }}>{timeAgo(item.updatedAt ?? item.createdAt)}</span>
                     </div>
-                  )}
-                </Link>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{item.title}</h3>
-                  <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: `color-mix(in srgb, ${status.color} 14%, transparent)`, color: status.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {status.label}
-                  </span>
+                    <Link to={`/listings/${item.id}`} style={{ display: 'block', fontWeight: 700, fontSize: '1rem', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: sold ? 'var(--text-muted)' : undefined }}>
+                      {item.title}
+                    </Link>
+                    <div className="price" style={{ fontSize: '1.1rem', color: sold ? 'var(--text-muted)' : undefined, textDecoration: sold ? 'line-through' : undefined }}>{formatPrice(item.price)}</div>
+                    <div className="muted" style={{ fontSize: '0.76rem' }}>
+                      {item.category?.name || 'General'}
+                      {item.status === 'LIVE' && item.expiresAt && <> · expires {new Date(item.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</>}
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '0.5rem' }}>{formatPrice(item.price)}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {item.category?.name || 'General'}
-                  {item.status === 'LIVE' && item.expiresAt && <> · expires {new Date(item.expiresAt).toLocaleDateString('en-IN')}</>}
-                </div>
-                {item.verifiedAt && item.status === 'LIVE' && <div style={{ marginTop: '0.5rem' }}><VerifiedBadge /></div>}
                 {review?.remark && (
-                  <div
-                    style={{
-                      marginTop: '0.75rem', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.45,
-                      color: 'var(--text-primary)',
-                      background: `color-mix(in srgb, ${remarkColor} 10%, transparent)`,
-                      border: `1px solid color-mix(in srgb, ${remarkColor} 35%, transparent)`,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700, color: remarkColor, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
-                      <MessageSquareWarning size={14} />
-                      {item.status === 'CHANGES_REQUESTED' ? 'What to change' : REVIEW_ACTION_LABELS[review.action] ?? 'Note from Becho'}
-                      <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                  <div className={`remark-box ${tone}`} style={{ color: 'var(--text-primary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: toneColor, fontSize: '0.8rem', marginBottom: '2px' }}>
+                      {tone === 'danger' ? <AlertTriangle size={14} /> : <MessageSquareWarning size={14} />}
+                      {item.status === 'CHANGES_REQUESTED' ? 'Staff remark' : REVIEW_ACTION_LABELS[review.action] ?? 'Note from Becho'}
+                      <span className="muted" style={{ fontWeight: 500 }}>· {new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                     </div>
                     <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{review.remark}</div>
                   </div>
                 )}
                 {item.status === 'CHANGES_REQUESTED' && !review?.remark && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>Our team asked for changes before this can go live.</div>
+                  <div className="remark-box danger" style={{ color: 'var(--danger)' }}>Our team asked for changes before this can go live.</div>
+                )}
+                {item.status === 'PENDING_REVIEW' && !review?.remark && (
+                  <div className="remark-box warn" style={{ color: 'var(--text-primary)', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <Hourglass size={15} color="var(--warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>Our team is reviewing this listing. You’ll get a notification when it’s approved.</span>
+                  </div>
                 )}
                 {reasons.length > 0 && (
-                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)' }}>
                     Flagged: {reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '1rem', flexWrap: 'wrap' }}>
-                  {(ACTIONS_BY_STATUS[item.status] ?? []).map(({ action, label, confirm }) => (
-                    <button
-                      key={action}
-                      disabled={busyId === item.id}
-                      onClick={() => runAction(item, action, confirm)}
-                      className={action === 'delete' ? undefined : 'btn-primary'}
-                      style={{
-                        padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderRadius: '6px', cursor: 'pointer',
-                        ...(action === 'delete' ? { background: 'transparent', border: '1px solid color-mix(in srgb, var(--danger) 50%, transparent)', color: 'var(--danger)' } : {}),
-                      }}
-                    >
-                      {action === 'edit' && <Pencil size={13} style={{ marginRight: '0.3rem', verticalAlign: '-2px' }} />}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                {actions.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+                    {actions.map(({ action, label, confirm }) => {
+                      const resubmit = action === 'edit' && label.startsWith('Edit &');
+                      const cls = action === 'delete'
+                        ? 'btn btn-danger-outline btn-sm'
+                        : resubmit
+                          ? 'btn btn-danger btn-sm'
+                          : action === 'submit' || action === 'renew'
+                            ? 'btn-primary btn-sm'
+                            : 'btn btn-outline btn-sm';
+                      return (
+                        <button key={action} type="button" disabled={busyId === item.id} onClick={() => runAction(item, action, confirm)} className={cls}>
+                          {action === 'edit' && !resubmit && <Pencil size={13} />}
+                          {label}
+                          {resubmit && <ArrowRight size={14} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </article>
             );
           })}
         </div>
       )}
-    </div>
+    </section>
   );
 };

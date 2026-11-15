@@ -1,28 +1,31 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Info, AlertTriangle, ShoppingBag } from 'lucide-react';
 import { PASSWORD_RULES } from '../utils/validation';
 
 /* Shared building blocks for the account forms (login, register, reset, account settings). */
 
 export const inputStyle = (invalid?: boolean): React.CSSProperties => ({
   width: '100%',
-  padding: '0.75rem',
-  borderRadius: '8px',
+  minHeight: '44px',
+  padding: '0.65rem 0.8rem',
+  borderRadius: '10px',
   background: 'var(--input-bg)',
   border: `1px solid ${invalid ? 'var(--danger)' : 'var(--input-border)'}`,
   color: 'var(--input-text)',
+  fontSize: '0.95rem',
   outline: 'none',
 });
 
 export const labelStyle: React.CSSProperties = {
   display: 'block',
   fontSize: '0.85rem',
-  color: 'var(--text-secondary)',
+  color: 'var(--text-primary)',
   marginBottom: '0.4rem',
-  fontWeight: 500,
+  fontWeight: 600,
 };
 
-export const linkStyle: React.CSSProperties = { color: 'var(--accent-primary)', fontWeight: 600 };
+export const linkStyle: React.CSSProperties = { color: 'var(--primary-text)', fontWeight: 600 };
 
 type Tone = 'danger' | 'success' | 'warning' | 'info';
 const TONE: Record<Tone, { color: string; Icon: typeof Info }> = {
@@ -42,7 +45,7 @@ export const Alert: React.FC<{ tone?: Tone; children: React.ReactNode; style?: R
         display: 'flex', alignItems: 'flex-start', gap: '0.5rem', color,
         background: `color-mix(in srgb, ${color} 12%, transparent)`,
         border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
-        padding: '0.7rem 0.85rem', borderRadius: '8px', fontSize: '0.9rem', lineHeight: 1.45, ...style,
+        padding: '0.7rem 0.85rem', borderRadius: '10px', fontSize: '0.9rem', lineHeight: 1.45, ...style,
       }}
     >
       <Icon size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
@@ -78,11 +81,11 @@ export const TextField: React.FC<FieldProps> = ({ id, label, error, hint, prefix
   <div>
     <label htmlFor={id} style={labelStyle}>{label}</label>
     {prefix ? (
-      <div style={{ display: 'flex', alignItems: 'stretch', borderRadius: '8px', border: `1px solid ${error ? 'var(--danger)' : 'var(--input-border)'}`, background: 'var(--input-bg)', overflow: 'hidden' }}>
-        <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', padding: '0 0.75rem', background: 'var(--surface-2)', borderRight: '1px solid var(--input-border)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+      <div className="price-input" style={{ borderRadius: '10px', borderColor: error ? 'var(--danger)' : undefined }}>
+        <span aria-hidden="true" className="cur" style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0 0.75rem' }}>
           {prefix}
         </span>
-        <input ref={inputRef} id={id} {...describedBy(id, error, !!hint)} {...rest} style={{ ...inputStyle(false), border: 'none', borderRadius: 0, ...style }} />
+        <input ref={inputRef} id={id} {...describedBy(id, error, !!hint)} {...rest} style={{ ...inputStyle(false), border: 'none', borderRadius: 0, background: 'transparent', boxShadow: 'none', ...style }} />
       </div>
     ) : (
       <input ref={inputRef} id={id} {...describedBy(id, error, !!hint)} {...rest} style={{ ...inputStyle(!!error), ...style }} />
@@ -162,13 +165,21 @@ export const PasswordChecklist: React.FC<{ password: string; id?: string }> = ({
 );
 
 /** Centered card used by the sign-in / sign-up / reset pages. */
-export const AuthCard: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; maxWidth?: number }> = ({ title, subtitle, children, footer, maxWidth = 420 }) => (
-  <main style={{ maxWidth: `${maxWidth}px`, margin: '3rem auto', padding: '0 1rem' }}>
-    <div className="glass-panel" style={{ padding: 'clamp(1.5rem, 5vw, 2.5rem)' }}>
-      <h1 style={{ textAlign: 'center', marginBottom: subtitle ? '0.4rem' : '1.5rem', fontSize: '1.6rem', lineHeight: 1.3 }}>{title}</h1>
+export const AuthCard: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; maxWidth?: number; icon?: React.ReactNode; overline?: string }> = ({ title, subtitle, children, footer, maxWidth = 440, icon, overline }) => (
+  <main className="auth-wrap" style={{ maxWidth: `${maxWidth}px` }}>
+    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+      <Link to="/" className="brand" aria-label="Becho home">
+        <span className="brand-mark" aria-hidden="true" style={{ display: 'inline-flex' }}><ShoppingBag size={17} strokeWidth={2.4} /></span>
+        Becho
+      </Link>
+    </div>
+    <div className="card auth-card">
+      {icon && <div className="auth-icon" aria-hidden="true">{icon}</div>}
+      {overline && <div className="overline" style={{ textAlign: 'center', marginBottom: '0.35rem' }}>{overline}</div>}
+      <h1 className="page-title" style={{ textAlign: 'center', marginBottom: subtitle ? '0.4rem' : '1.5rem' }}>{title}</h1>
       {subtitle && <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{subtitle}</p>}
       {children}
-      {footer && <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '0.9rem' }}>{footer}</div>}
+      {footer && <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.9rem' }}>{footer}</div>}
     </div>
   </main>
 );

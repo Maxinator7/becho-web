@@ -1,90 +1,228 @@
-import React from 'react';
-import { Link, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
+import {
+  ArrowLeft, Compass, Heart, Home as HomeIcon, List, LogOut, MessageCircle, Plus, Search, ShoppingBag, User,
+} from 'lucide-react';
+import { fetchApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationsContext';
 import { LocationSelector } from './LocationSelector';
 import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
-import { ShoppingBag, Heart, MessageSquare, PlusCircle, LogOut, User, List } from 'lucide-react';
+import { Avatar } from './ui';
 
-export const Navbar: React.FC = () => {
-  const { user, logout, isVerified } = useAuth();
+interface ConversationSummary {
+  id: string;
+  messages?: { senderId: string; isRead: boolean }[];
+}
+
+/**
+ * Conversations whose latest message is from the other person and still unread.
+ * Re-checked whenever the notification count changes (that context already polls).
+ */
+function useUnreadChats() {
+  const { user } = useAuth();
+  const { unreadCount } = useNotifications();
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!user) { setCount(0); return; }
+    let cancelled = false;
+    fetchApi<ConversationSummary[]>('/conversations').then((res) => {
+      if (cancelled || !res.success || !res.data) return;
+      setCount(res.data.filter((c) => { const m = c.messages?.[0]; return m && m.senderId !== user.id && !m.isRead; }).length);
+    });
+    return () => { cancelled = true; };
+  }, [user, unreadCount]);
+  return count;
+}
+
+const AccountMenu: React.FC = () => {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const onAccountPage = useRouterLocation().pathname === '/account';
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
+  }, [open]);
+
+  if (!user) return null;
+  const go = (to: string) => { setOpen(false); navigate(to); };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="Account menu" title={user.displayName} style={{ display: 'flex', padding: 2, borderRadius: 999 }}>
+        <Avatar name={user.displayName} />
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 10px', borderBottom: '1px solid var(--border-subtle)', marginBottom: 4 }}>
+            <Avatar name={user.displayName} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.displayName}</div>
+              {user.userCode && <div className="muted" style={{ fontSize: '0.75rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{user.userCode}</div>}
+            </div>
+          </div>
+          <button role="menuitem" className="menu-item" onClick={() => go('/account')}><User size={16} /> My account</button>
+          <button role="menuitem" className="menu-item" onClick={() => go('/my-listings')}><List size={16} /> My listings</button>
+          <button role="menuitem" className="menu-item" onClick={() => go('/favorites')}><Heart size={16} /> Saved ads</button>
+          <div className="menu-item" style={{ justifyContent: 'space-between', cursor: 'default' }}>
+            <span>Theme</span>
+            <ThemeToggle />
+          </div>
+          <button role="menuitem" className="menu-item danger" onClick={() => { setOpen(false); logout(); navigate('/'); }}><LogOut size={16} /> Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TopSearch: React.FC = () => {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  return (
+    <form
+      className="topbar-search"
+      role="search"
+      onSubmit={(e) => { e.preventDefault(); navigate(q.trim() ? `/browse?search=${encodeURIComponent(q.trim())}` : '/browse'); }}
+    >
+      <label className="searchbar">
+        <Search size={18} />
+        <span className="sr-only">Search listings</span>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phones, bikes, sofas…" />
+      </label>
+    </form>
+  );
+};
+
+/** Bottom tab bar shown at phone widths. */
+const BottomTabs: React.FC<{ chatBadge: number }> = ({ chatBadge }) => {
+  const { pathname } = useRouterLocation();
+  const tab = (to: string, label: string, Icon: typeof HomeIcon, active: boolean, badge = 0) => (
+    <Link to={to} className={`tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
+      <span className="tab-icon">
+        <Icon size={22} strokeWidth={active ? 2.4 : 2} />
+        {badge > 0 && <span className="tab-badge" aria-label={`${badge} unread`}>{badge > 9 ? '9+' : badge}</span>}
+      </span>
+      {label}
+    </Link>
+  );
+  return (
+    <nav className="bottom-tabs" aria-label="Main">
+      {tab('/', 'Home', HomeIcon, pathname === '/')}
+      {tab('/browse', 'Explore', Compass, pathname.startsWith('/browse'))}
+      <Link to="/create-listing" className="tab-fab" aria-label="Sell an item">
+        <span className="fab"><Plus size={26} strokeWidth={2.4} /></span>
+        Sell
+      </Link>
+      {tab('/chat', 'Chats', MessageCircle, pathname.startsWith('/chat'), chatBadge)}
+      {tab('/account', 'Account', User, pathname.startsWith('/account') || pathname.startsWith('/my-listings') || pathname.startsWith('/favorites'))}
+    </nav>
+  );
+};
+
+interface NavbarProps {
+  /** Mobile only: replace the logo bar with "← title" (detail screens). */
+  title?: string;
+  /** Where the mobile back arrow goes; default is the previous page. */
+  backTo?: string;
+  /** Mobile only: buttons on the right of the sub-header. */
+  actions?: React.ReactNode;
+  /** Hide the bottom tab bar (screens with their own sticky action bar). */
+  hideTabs?: boolean;
+}
+
+export const Navbar: React.FC<NavbarProps> = ({ title, backTo, actions, hideTabs }) => {
+  const { user, isVerified } = useAuth();
+  const navigate = useNavigate();
+  const { pathname } = useRouterLocation();
+  const onAccountPage = pathname === '/account';
+  const chatBadge = useUnreadChats();
+
+  const back = () => {
+    if (backTo) navigate(backTo);
+    else if (window.history.length > 1) navigate(-1);
+    else navigate('/');
   };
 
   return (
     <>
-    <nav className="glass-panel" style={{ position: 'relative', zIndex: 50, padding: '0.85rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-        <Link to="/" style={{ fontSize: '1.35rem', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShoppingBag size={22} color="var(--accent-primary)" />
-          <span className="gradient-text">BECHO</span>
-        </Link>
-        <LocationSelector />
-      </div>
+      <header className={`topbar${title ? ' has-sub' : ''}`}>
+        <div className="topbar-inner topbar-main">
+          <Link to="/" className="brand" aria-label="Becho home">
+            <span className="brand-mark" aria-hidden="true"><ShoppingBag size={17} strokeWidth={2.4} /></span>
+            Becho
+          </Link>
+          <LocationSelector />
+          <TopSearch />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-        <ThemeToggle />
-        <Link to="/browse" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none', color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 500 }}>
-          Browse
-        </Link>
+          <div className="topbar-right">
+            <nav className="topbar-links" aria-label="Main">
+              <NavLink to="/browse" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Explore">
+                <Compass size={18} /> <span className="label">Explore</span>
+              </NavLink>
+              {user && (
+                <>
+                  <NavLink to="/chat" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Chats">
+                    <MessageCircle size={18} /> <span className="label">Chats</span>
+                    {chatBadge > 0 && <span className="chip chip-primary" style={{ padding: '0 6px', fontSize: '0.68rem' }}>{chatBadge}</span>}
+                  </NavLink>
+                  <NavLink to="/favorites" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Saved">
+                    <Heart size={18} /> <span className="label">Saved</span>
+                  </NavLink>
+                </>
+              )}
+            </nav>
 
-        {user ? (
-          <>
-            <Link to="/favorites" title="Favorites" aria-label="Favorites" className="nav-item">
-              <Heart size={18} color="var(--danger)" /> <span className="nav-label">Favorites</span>
-            </Link>
+            {user ? (
+              <>
+                <NotificationBell />
+                <Link to="/create-listing" className="btn-primary desktop-only" style={{ minHeight: 40 }}>
+                  <Plus size={18} /> Sell
+                </Link>
+                <AccountMenu />
+              </>
+            ) : (
+              <>
+                <span className="desktop-only"><ThemeToggle /></span>
+                <Link to="/login" className="btn btn-ghost desktop-only">Sign in</Link>
+                <Link to="/register" className="btn-primary desktop-only">Create account</Link>
+                <Link to="/login" className="btn-primary btn-sm mobile-only">Sign in</Link>
+              </>
+            )}
+          </div>
+        </div>
 
-            <Link to="/chat" title="Messages" aria-label="Messages" className="nav-item">
-              <MessageSquare size={18} color="var(--accent-primary)" /> <span className="nav-label">Messages</span>
-            </Link>
-
-            <Link to="/my-listings" title="My listings" aria-label="My listings" className="nav-item">
-              <List size={18} color="var(--text-secondary)" /> <span className="nav-label">My Listings</span>
-            </Link>
-
-            <NotificationBell />
-
-            <Link to="/create-listing" className="btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}>
-              <PlusCircle size={16} /> <span style={{ whiteSpace: 'nowrap' }}>Sell Item</span>
-            </Link>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--surface-2)', padding: '0.35rem 0.75rem', borderRadius: '20px' }}>
-              <Link to="/account" title="Your account" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-primary)', textDecoration: 'none' }}>
-                <User size={14} color="var(--text-secondary)" />
-                <span className="nav-name" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{user.displayName}</span>
-              </Link>
-              <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }} title="Logout">
-                <LogOut size={16} />
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <Link to="/login" style={{ textDecoration: 'none', color: 'var(--text-primary)', fontSize: '0.9rem' }}>
-              Sign In
-            </Link>
-            <Link to="/register" className="btn-primary" style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', textDecoration: 'none' }}>
-              Register
-            </Link>
-          </>
+        {title && (
+          <div className="subbar">
+            <button type="button" className="icon-btn" onClick={back} aria-label="Back"><ArrowLeft size={22} /></button>
+            <div className="subbar-title">{title}</div>
+            {actions}
+          </div>
         )}
-      </div>
-    </nav>
-    {user && isVerified && !user.phone && !onAccountPage && (
-      <div role="status" style={{ margin: '-1.25rem 0 1.5rem', padding: '0.65rem 1rem', borderRadius: '8px', background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)', color: 'var(--warning)', fontSize: '0.9rem' }}>
-        Add your mobile number to keep your account secure. <Link to="/account" style={{ fontWeight: 700, textDecoration: 'underline' }}>Add mobile number</Link>
-      </div>
-    )}
-    {user && !isVerified && (
-      <div style={{ margin: '-1.25rem 0 1.5rem', padding: '0.65rem 1rem', borderRadius: '8px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: 'var(--warning)', fontSize: '0.9rem' }}>
-        Verify your account to sell, chat and make offers. <Link to="/verify" style={{ fontWeight: 700, textDecoration: 'underline' }}>Verify now</Link>
-      </div>
-    )}
+      </header>
+
+      {user && isVerified && !user.phone && !onAccountPage && (
+        <div className="notice-strip">
+          <div role="status" className="remark-box warn" style={{ color: 'var(--text-primary)' }}>
+            Add your mobile number to keep your account secure. <Link to="/account" className="link" style={{ color: 'var(--warning)' }}>Add mobile number</Link>
+          </div>
+        </div>
+      )}
+      {user && !isVerified && (
+        <div className="notice-strip">
+          <div className="remark-box warn" style={{ color: 'var(--text-primary)' }}>
+            Verify your account to sell, chat and make offers. <Link to="/verify" className="link" style={{ color: 'var(--warning)' }}>Verify now</Link>
+          </div>
+        </div>
+      )}
+
+      {!hideTabs && <BottomTabs chatBadge={chatBadge} />}
     </>
   );
 };

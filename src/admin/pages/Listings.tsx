@@ -4,8 +4,8 @@ import { AlertTriangle, Package, X } from 'lucide-react';
 import { fetchApi } from '../../api/client';
 import { formatPrice } from '../../utils/format';
 import type { AdminListingRow, Category, Pagination as PaginationT, ServiceArea } from '../types';
-import { Card, EmptyState, ErrorBanner, ListingStatusPill, LISTING_STATUS, Loading, PageHeader, Pagination, Thumb, VerifiedBadge, apiError, fmtDate, fmtNum, qs, toneText } from '../ui';
-import { ParamSelect, SearchBox, usePageParam } from './Users';
+import { Button, Card, EmptyState, ErrorBanner, ListingStatusPill, LISTING_STATUS, Loading, PageHeader, Pagination, Thumb, VerifiedBadge, apiError, fmtDate, fmtNum, qs } from '../ui';
+import { ParamSelect, SearchBox, usePageParam } from '../filters';
 
 const PAGE_SIZE = 25;
 const STATUS_OPTIONS: [string, string][] = ['PENDING_REVIEW', 'SUBMITTED', 'LIVE', 'RESERVED', 'CHANGES_REQUESTED', 'SOLD', 'REJECTED', 'SUSPENDED', 'EXPIRED', 'DRAFT'].map((s) => [s, LISTING_STATUS[s]?.[0] ?? s]);
@@ -72,82 +72,93 @@ export const ListingsPage: React.FC = () => {
 
   return (
     <div>
-      <PageHeader title="Listings" subtitle={pagination ? `${fmtNum(pagination.total)} listing${pagination.total === 1 ? '' : 's'}${hasFilters ? ' match' : ''}` : 'All listings, every status'} />
-      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '1rem', alignItems: 'center' }}>
-        <SearchBox label="Search listings" placeholder="Title, seller name or user code" />
-        <ParamSelect name="status" label="Status" allLabel="All statuses" options={STATUS_OPTIONS} />
-        <ParamSelect name="verified" label="Verified" allLabel="Verified: any" options={[['true', 'Verified'], ['false', 'Not verified']]} />
-        <ParamSelect name="cityCode" label="City" allLabel="All cities" options={cities} />
-        <ParamSelect name="categoryId" label="Category" allLabel="All categories" options={categories} />
-        <ParamSelect name="sort" label="Sort" defaultValue="newest" options={[['newest', 'Newest first'], ['oldest', 'Oldest first'], ['price_desc', 'Price: high to low'], ['price_asc', 'Price: low to high']]} />
-        {hasFilters && (
-          <button className="adm-btn adm-link" style={{ fontSize: '0.85rem' }} onClick={() => setParams(f.sort !== 'newest' ? { sort: f.sort } : {})}>
-            Clear filters
-          </button>
-        )}
-      </div>
-      {f.sellerId && (
-        <div style={{ marginBottom: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '0.25rem 0.4rem 0.25rem 0.7rem', borderRadius: 999, background: 'var(--surface-2)', border: '1px solid var(--border-color)' }}>
-          Seller: <Link className="adm-link" to={`/users/${f.sellerId}`}>{sellerFilterName ?? 'this user'}</Link>
-          <button className="adm-btn" aria-label="Remove seller filter" style={{ display: 'flex', color: 'var(--text-muted)' }} onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.delete('sellerId'); n.delete('page'); return n; })}>
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      {error && <div style={{ marginBottom: '1rem' }}><ErrorBanner message={error} /></div>}
-      <Card padding="0.5rem 0.75rem 0.85rem">
-        {!listings && loading ? (
-          <Loading />
-        ) : listings && listings.length === 0 ? (
-          <EmptyState icon={<Package size={30} />} title="No listings found">{hasFilters ? 'Try a different search or clear the filters.' : 'No listings yet.'}</EmptyState>
-        ) : (
-          <div className="adm-table-wrap" style={{ opacity: loading ? 0.6 : 1 }}>
-            <table className="adm-table">
-              <thead>
-                <tr>
-                  <th aria-label="Photo" />
-                  <th>Title</th>
-                  <th className="adm-num">Price</th>
-                  <th>Status</th>
-                  <th>Seller</th>
-                  <th>City</th>
-                  <th className="adm-num">Offers</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {listings?.map((l) => (
-                  <tr key={l.id} className="adm-row" tabIndex={0} onClick={() => navigate(`/listings/${l.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/listings/${l.id}`)}>
-                    <td style={{ width: 56 }}><Thumb url={l.media[0]?.url} mediaType={l.media[0]?.mediaType} size={44} /></td>
-                    <td style={{ minWidth: 200, maxWidth: 300 }}>
-                      <div style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.35 }} title={l.title}>{l.title}</div>
-                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {l.category?.name ?? 'Uncategorised'}
-                        {l.verifiedAt && <VerifiedBadge small />}
-                        {l.sanitization?.status === 'FLAGGED' && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', color: toneText('danger'), fontWeight: 600 }}><AlertTriangle size={11} /> Flagged</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="adm-num" style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{formatPrice(l.price)}</td>
-                    <td><ListingStatusPill status={l.status} /></td>
-                    <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                      <Link className="adm-link" to={`/users/${l.seller.id}`}>{l.seller.displayName}</Link>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-                        {l.seller.userCode}{l.seller.status !== 'ACTIVE' && <span style={{ color: toneText('danger'), fontFamily: 'inherit' }}> · {l.seller.status.toLowerCase()}</span>}
-                      </div>
-                    </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{l.cityCode}</td>
-                    <td className="adm-num">{fmtNum(l._count.offers)}</td>
-                    <td style={{ whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{fmtDate(l.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <PageHeader
+        overline="Catalogue"
+        title="Listings inventory"
+        titleExtra={pagination && <span className="a-chip a-chip--pill" style={{ marginTop: 8, background: 'var(--a-surface-3)' }}>{fmtNum(pagination.total)}{hasFilters ? ' match' : ' total'}</span>}
+        subtitle="Every listing in every status. Open one to review, verify, request changes or suspend it."
+      />
+      <div className="a-stack">
+        <Card>
+          <div className="a-toolbar">
+            <SearchBox label="Search listings" placeholder="Title, seller name or user code" />
+            <ParamSelect name="status" label="Status" allLabel="All statuses" options={STATUS_OPTIONS} />
+            <ParamSelect name="verified" label="Verified" allLabel="Verified: any" options={[['true', 'Verified'], ['false', 'Not verified']]} />
+            <ParamSelect name="cityCode" label="City" allLabel="All cities" options={cities} />
+            <ParamSelect name="categoryId" label="Category" allLabel="All categories" options={categories} />
+            <ParamSelect name="sort" label="Sort" defaultValue="newest" options={[['newest', 'Newest first'], ['oldest', 'Oldest first'], ['price_desc', 'Price: high to low'], ['price_asc', 'Price: low to high']]} />
+            {hasFilters && (
+              <Button variant="ghost" small icon={<X size={14} />} onClick={() => setParams(f.sort !== 'newest' ? { sort: f.sort } : {})}>
+                Clear filters
+              </Button>
+            )}
           </div>
-        )}
-        <Pagination pagination={pagination} onPage={setPage} noun="listings" />
-      </Card>
+          {f.sellerId && (
+            <div className="a-chip a-chip--accent a-chip--pill" style={{ marginTop: 12, padding: '4px 6px 4px 12px' }}>
+              Seller: <Link className="a-link" to={`/users/${f.sellerId}`}>{sellerFilterName ?? 'this user'}</Link>
+              <button aria-label="Remove seller filter" style={{ display: 'flex', color: 'inherit' }} onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.delete('sellerId'); n.delete('page'); return n; })}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+        </Card>
+        {error && <ErrorBanner message={error} />}
+        <Card flush>
+          {!listings && loading ? (
+            <Loading />
+          ) : listings && listings.length === 0 ? (
+            <EmptyState icon={<Package size={30} />} title="No listings found">{hasFilters ? 'Try a different search or clear the filters.' : 'No listings yet.'}</EmptyState>
+          ) : (
+            <div className="a-table-wrap" style={{ opacity: loading ? 0.6 : 1 }}>
+              <table className="a-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th className="a-th-num">Price</th>
+                    <th>Status</th>
+                    <th>Seller</th>
+                    <th className="a-hide-md">City</th>
+                    <th className="a-th-num a-hide-md">Offers</th>
+                    <th className="a-hide-md">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {listings?.map((l) => (
+                    <tr key={l.id} className={`a-tr-link${l.sanitization?.status === 'FLAGGED' ? ' is-flagged' : ''}`} tabIndex={0} onClick={() => navigate(`/listings/${l.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/listings/${l.id}`)}>
+                      <td style={{ minWidth: 260, maxWidth: 380 }}>
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <Thumb url={l.media[0]?.url} mediaType={l.media[0]?.mediaType} size={48} />
+                          <div style={{ minWidth: 0 }}>
+                            <div className="a-clamp-2" style={{ fontWeight: 600, lineHeight: 1.35 }} title={l.title}>{l.title}</div>
+                            <div className="a-row" style={{ gap: 6, marginTop: 3 }}>
+                              <span className="a-small a-text-2">{l.category?.name ?? 'Uncategorised'}<span className="a-show-md"> · {l.cityCode} · {fmtDate(l.createdAt)}</span></span>
+                              {l.verifiedAt && <VerifiedBadge small />}
+                              {l.sanitization?.status === 'FLAGGED' && <span className="a-chip a-chip--danger"><AlertTriangle size={11} /> Flagged</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="a-td-num" style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{formatPrice(l.price)}</td>
+                      <td><ListingStatusPill status={l.status} /></td>
+                      <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                        <Link className="a-link" style={{ fontWeight: 600 }} to={`/users/${l.seller.id}`}>{l.seller.displayName}</Link>
+                        <div className="a-small a-text-2">
+                          <span className="a-mono">{l.seller.userCode}</span>
+                          {l.seller.status !== 'ACTIVE' && <span style={{ color: 'var(--a-danger-text)', fontWeight: 600 }}> · {l.seller.status.toLowerCase()}</span>}
+                        </div>
+                      </td>
+                      <td className="a-text-2 a-hide-md">{l.cityCode}</td>
+                      <td className="a-td-num a-hide-md">{fmtNum(l._count.offers)}</td>
+                      <td className="a-text-2 a-hide-md" style={{ whiteSpace: 'nowrap' }}>{fmtDate(l.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Pagination pagination={pagination} onPage={setPage} noun="listings" />
+        </Card>
+      </div>
     </div>
   );
 };

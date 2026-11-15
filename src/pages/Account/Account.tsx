@@ -1,33 +1,25 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { fetchApi, tokenStore } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
 import { useAuth, UserProfile } from '../../context/AuthContext';
-import { Copy, Check, ShieldCheck, UserCircle2, Smartphone, Lock, Mail, Pencil } from 'lucide-react';
-import { Alert, PasswordChecklist, PasswordField, TextField, labelStyle } from '../../components/FormControls';
+import { useNotifications } from '../../context/NotificationsContext';
+import { Copy, Check, ShieldCheck, Smartphone, Lock, Mail, Pencil, Heart, Bell, ChevronRight, LogOut, BadgeCheck, CalendarDays } from 'lucide-react';
+import { Alert, PasswordChecklist, PasswordField, TextField } from '../../components/FormControls';
+import { Avatar, Chip } from '../../components/ui';
+import { ThemeSwitch } from '../../components/ThemeToggle';
+import { MyListingItem, MyListingsPanel } from '../Marketplace/MyListings';
+import { formatCompactINR, formatPrice } from '../../utils/format';
 import {
   FieldErrors, fieldErrorsFrom, focusFirstError, formatIndianMobile, hasErrors, normalizeIndianMobile,
   validateConfirm, validateMobile, validateName, validatePassword,
 } from '../../utils/validation';
 
-const sectionTitle: React.CSSProperties = { fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' };
-const secondaryBtn: React.CSSProperties = { padding: '0.55rem 1rem', borderRadius: '8px', border: '1px solid var(--border-strong)', background: 'var(--surface-2)', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.88rem' };
 
-const Badge: React.FC<{ ok: boolean; children: React.ReactNode }> = ({ ok, children }) => {
-  const color = ok ? 'var(--success)' : 'var(--warning)';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', color, background: `color-mix(in srgb, ${color} 12%, transparent)` }}>
-      {ok && <ShieldCheck size={12} />} {children}
-    </span>
-  );
-};
-
-const ReadOnlyRow: React.FC<{ label: string; icon: React.ReactNode; children: React.ReactNode }> = ({ label, icon, children }) => (
-  <div>
-    <div style={labelStyle}>{label}</div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.65rem 0.75rem', borderRadius: '8px', background: 'var(--surface-1)', border: '1px solid var(--border-color)' }}>
-      {icon}{children}
-    </div>
-  </div>
+const TrustChip: React.FC<{ ok: boolean; okLabel?: string; badLabel: string; badTone?: 'warning' | 'danger' | 'neutral' }> = ({ ok, okLabel = 'Verified', badLabel, badTone = 'warning' }) => (
+  ok
+    ? <Chip tone="success"><BadgeCheck size={12} /> {okLabel}</Chip>
+    : <Chip tone={badTone}>{badLabel}</Chip>
 );
 
 /* ───────────── profile (name, user code, email, mobile) ───────────── */
@@ -108,65 +100,106 @@ const ProfileSection: React.FC<{ user: UserProfile }> = ({ user }) => {
     else setMobileMsg({ tone: 'danger', text: res.error?.message || 'Could not save your mobile number.' });
   };
 
+  const roleLabel = user.role === 'ADMIN' ? 'Admin' : user.role === 'MODERATOR' ? 'Moderator' : 'Member';
+  const verifiedAccount = user.status === 'ACTIVE';
+  const allSet = verifiedAccount && !!user.emailVerifiedAt && !!user.phone;
+
   return (
-    <section className="glass-panel" style={{ padding: '1.5rem' }} aria-labelledby="acc-profile-title">
-      <h2 id="acc-profile-title" style={sectionTitle}><UserCircle2 size={20} color="var(--accent-primary)" /> Profile</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
-        <ReadOnlyRow label="User code" icon={null}>
-          <code style={{ fontSize: '1rem', fontWeight: 700, letterSpacing: '1px', color: 'var(--text-primary)' }}>{user.userCode ?? '—'}</code>
-          {user.userCode && (
-            <button type="button" onClick={copyCode} aria-label="Copy user code" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: copied ? 'var(--success)' : 'var(--accent-primary)' }}>
-              {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
-            </button>
+    <section className="card card-pad" aria-labelledby="acc-profile-title">
+      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <Avatar name={user.displayName} size="lg" />
+          {verifiedAccount && (
+            <span style={{ position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 99, background: 'var(--success-fill)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface)' }} title="Verified account">
+              <Check size={12} strokeWidth={3} />
+            </span>
           )}
-          <span style={{ flexBasis: '100%', fontSize: '0.78rem', color: 'var(--text-muted)' }}>Share this with Becho support. You can also use it to sign in.</span>
-        </ReadOnlyRow>
-
-        {editingName ? (
-          <form onSubmit={saveName} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <TextField
-              id="acc-name" label="Name" autoComplete="name" maxLength={60} autoFocus value={name} error={nameError}
-              onChange={(e) => { setName(e.target.value); if (nameError) setNameError(validateName(e.target.value)); }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button type="submit" className="btn-primary" disabled={savingName} style={{ padding: '0.55rem 1rem', fontSize: '0.88rem' }}>{savingName ? 'Saving…' : 'Save name'}</button>
-              <button type="button" style={secondaryBtn} onClick={() => { setEditingName(false); setNameError(undefined); setName(user.displayName); }}>Cancel</button>
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {!editingName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h2 id="acc-profile-title" style={{ fontSize: '1.2rem', fontWeight: 700, overflowWrap: 'anywhere' }}>{user.displayName}</h2>
+              <Chip tone="primary" upper>{roleLabel}</Chip>
+              <button type="button" onClick={() => { setEditingName(true); setNameMsg(null); }} className="icon-btn" aria-label="Edit name" title="Edit name" style={{ width: 30, height: 30, color: 'var(--text-muted)' }}>
+                <Pencil size={15} />
+              </button>
             </div>
-          </form>
-        ) : (
-          <ReadOnlyRow label="Name" icon={null}>
-            <span style={{ fontWeight: 600 }}>{user.displayName}</span>
-            <button type="button" onClick={() => { setEditingName(true); setNameMsg(null); }} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-primary)' }}>
-              <Pencil size={14} /> Edit
-            </button>
-          </ReadOnlyRow>
-        )}
-        {nameMsg && <Alert tone={nameMsg.tone}>{nameMsg.text}</Alert>}
-
-        <ReadOnlyRow label="Email" icon={<Mail size={16} color="var(--text-secondary)" />}>
-          <span>{user.email ?? '—'}</span>
-          {user.email && <Badge ok={!!user.emailVerifiedAt}>{user.emailVerifiedAt ? 'Verified' : 'Not verified'}</Badge>}
-        </ReadOnlyRow>
-
-        {user.phone ? (
-          <ReadOnlyRow label="Mobile number" icon={<Smartphone size={16} color="var(--text-secondary)" />}>
-            <span>{formatIndianMobile(user.phone)}</span>
-            <span style={{ flexBasis: '100%', fontSize: '0.78rem', color: 'var(--text-muted)' }}>To change your mobile number, contact support.</span>
-          </ReadOnlyRow>
-        ) : (
-          <form onSubmit={saveMobile} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', padding: '1rem', borderRadius: '10px', border: '1px dashed color-mix(in srgb, var(--warning) 50%, transparent)', background: 'color-mix(in srgb, var(--warning) 6%, transparent)' }}>
-            <TextField
-              id="acc-mobile" label="Add your mobile number" type="tel" inputMode="numeric" autoComplete="tel-national" prefix="+91" maxLength={16}
-              value={mobile} error={mobileError} placeholder="98765 43210"
-              hint="Helps keep your account secure. You can sign in with it, and it isn't shown to buyers."
-              onChange={(e) => { const v = e.target.value.replace(/[^\d\s+-]/g, ''); setMobile(v); if (mobileError) setMobileError(validateMobile(v)); }}
-              onBlur={() => mobile && setMobileError(validateMobile(mobile))}
-            />
-            <div><button type="submit" className="btn-primary" disabled={savingMobile} style={{ padding: '0.55rem 1rem', fontSize: '0.88rem' }}>{savingMobile ? 'Saving…' : 'Save mobile number'}</button></div>
-          </form>
-        )}
-        {mobileMsg && <Alert tone={mobileMsg.tone}>{mobileMsg.text}</Alert>}
+          )}
+          {editingName && <h2 id="acc-profile-title" className="sr-only">Profile</h2>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
+            {user.userCode && (
+              <>
+                <code className="chip chip-neutral chip-square" style={{ fontSize: '0.78rem', letterSpacing: '0.06em', fontWeight: 700 }} title="Your user code. Share it with Becho support; you can also sign in with it.">{user.userCode}</code>
+                <button type="button" onClick={copyCode} aria-label="Copy user code" className="icon-btn" style={{ width: 30, height: 30, color: copied ? 'var(--success)' : 'var(--text-muted)' }}>
+                  {copied ? <Check size={15} /> : <Copy size={15} />}
+                </button>
+                {copied && <span role="status" style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Copied</span>}
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      {editingName && (
+        <form onSubmit={saveName} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '14px' }}>
+          <TextField
+            id="acc-name" label="Name" autoComplete="name" maxLength={60} autoFocus value={name} error={nameError}
+            onChange={(e) => { setName(e.target.value); if (nameError) setNameError(validateName(e.target.value)); }}
+          />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" className="btn-primary btn-sm" disabled={savingName}>{savingName ? 'Saving…' : 'Save name'}</button>
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => { setEditingName(false); setNameError(undefined); setName(user.displayName); }}>Cancel</button>
+          </div>
+        </form>
+      )}
+      {nameMsg && <Alert tone={nameMsg.tone} style={{ marginTop: '10px' }}>{nameMsg.text}</Alert>}
+
+      <div className="trust-box">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <span className="overline" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>Identity &amp; trust</span>
+          {allSet ? <Chip tone="success"><ShieldCheck size={12} /> All set</Chip> : <Chip tone="warning">Action needed</Chip>}
+        </div>
+        <div className="trust-row">
+          <Mail size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          <span className="tr-text" title={user.email ?? undefined}>{user.email ?? 'No email'}</span>
+          {user.email && <TrustChip ok={!!user.emailVerifiedAt} badLabel="Not verified" />}
+        </div>
+        <div className="trust-row">
+          <Smartphone size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          <span className="tr-text">{user.phone ? formatIndianMobile(user.phone) : 'Mobile number'}</span>
+          {user.phone
+            ? <TrustChip ok={!!user.phoneVerifiedAt} badLabel="On file" badTone="neutral" />
+            : <Chip tone="danger">Not added</Chip>}
+        </div>
+        <div className="trust-row">
+          <ShieldCheck size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+          <span className="tr-text">Account verification</span>
+          {verifiedAccount ? <TrustChip ok badLabel="" /> : <Link to="/verify" className="chip chip-warning">Verify now</Link>}
+        </div>
+        {user.createdAt && (
+          <div className="trust-row">
+            <CalendarDays size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+            <span className="tr-text">Member since {new Date(user.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+          </div>
+        )}
+        {user.phone && !user.phoneVerifiedAt && (
+          <div className="muted" style={{ fontSize: '0.74rem', marginTop: '2px' }}>To change your mobile number, contact support.</div>
+        )}
+      </div>
+
+      {!user.phone && (
+        <form onSubmit={saveMobile} noValidate className="remark-box warn" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '12px' }}>
+          <TextField
+            id="acc-mobile" label="Add your mobile number" type="tel" inputMode="numeric" autoComplete="tel-national" prefix="+91" maxLength={16}
+            value={mobile} error={mobileError} placeholder="98765 43210"
+            hint="Helps keep your account secure. You can sign in with it, and it isn't shown to buyers."
+            onChange={(e) => { const v = e.target.value.replace(/[^\d\s+-]/g, ''); setMobile(v); if (mobileError) setMobileError(validateMobile(v)); }}
+            onBlur={() => mobile && setMobileError(validateMobile(mobile))}
+          />
+          <div><button type="submit" className="btn-primary btn-sm" disabled={savingMobile}>{savingMobile ? 'Saving…' : 'Save mobile number'}</button></div>
+        </form>
+      )}
+      {mobileMsg && <Alert tone={mobileMsg.tone} style={{ marginTop: '10px' }}>{mobileMsg.text}</Alert>}
     </section>
   );
 };
@@ -239,8 +272,8 @@ const PasswordSection: React.FC = () => {
   };
 
   return (
-    <section className="glass-panel" style={{ padding: '1.5rem' }} aria-labelledby="acc-pw-title">
-      <h2 id="acc-pw-title" style={sectionTitle}><Lock size={20} color="var(--accent-primary)" /> Change password</h2>
+    <section id="change-password" className="card card-pad" aria-labelledby="acc-pw-title">
+      <h2 id="acc-pw-title" className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', fontSize: '1rem' }}><Lock size={18} color="var(--primary-text)" /> Change password</h2>
       {msg && <Alert tone={msg.tone} style={{ marginBottom: '1rem' }}>{msg.text}</Alert>}
       <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
         <PasswordField id="pw-current" label="Current password" autoComplete="current-password" value={values.current}
@@ -252,7 +285,7 @@ const PasswordSection: React.FC = () => {
         <PasswordField id="pw-confirm" label="Confirm new password" autoComplete="new-password" maxLength={128} value={values.confirm}
           onChange={(e) => set('confirm', e.target.value)} onBlur={() => blur('confirm')} error={errors.confirm} />
         <div>
-          <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving} style={{ padding: '0.6rem 1.2rem', opacity: saving ? 0.7 : 1 }}>
+          <button type="submit" className="btn-primary" disabled={saving} aria-busy={saving} style={{ opacity: saving ? 0.7 : 1 }}>
             {saving ? 'Changing…' : 'Change password'}
           </button>
         </div>
@@ -261,20 +294,118 @@ const PasswordSection: React.FC = () => {
   );
 };
 
-export const Account: React.FC = () => {
-  const { user, refreshUser } = useAuth();
+export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
+  const { user, refreshUser, logout } = useAuth();
+  const { desktopAlerts, enableDesktopAlerts } = useNotifications();
+  const navigate = useNavigate();
+  const notice = ((useRouterLocation().state || {}) as { notice?: string }).notice;
+  const [listings, setListings] = useState<MyListingItem[]>([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+  const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
   // Pick up changes made elsewhere (another tab, staff edits).
   useEffect(() => { void refreshUser(); }, [refreshUser]);
+
+  const loadListings = useCallback(() => {
+    fetchApi<MyListingItem[]>('/listings/mine')
+      .then((res) => { if (res.success && res.data) setListings(res.data); })
+      .finally(() => setLoadingListings(false));
+  }, []);
+  useEffect(() => { loadListings(); }, [loadListings]);
+  useEffect(() => {
+    fetchApi<unknown[]>('/favorites').then((res) => { if (res.success && res.data) setSavedCount(res.data.length); });
+  }, []);
+
+  // /my-listings opens this page at the listings section.
+  useEffect(() => {
+    if (section === 'listings' && !loadingListings && window.matchMedia('(max-width: 960px)').matches) {
+      document.getElementById('my-listings')?.scrollIntoView({ block: 'start' });
+    }
+  }, [section, loadingListings]);
+
+  useEffect(() => {
+    if (showPassword) document.getElementById('change-password')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showPassword]);
+
   if (!user) return null;
 
+  const live = listings.filter((l) => l.status === 'LIVE' || l.status === 'RESERVED').length;
+  const sold = listings.filter((l) => l.status === 'SOLD');
+  const soldValue = sold.reduce((sum, l) => sum + Number(l.price), 0);
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '1100px', margin: '0 auto' }}>
+    <>
       <Navbar />
-      <h1 style={{ fontSize: '1.75rem', marginBottom: '1.5rem' }}>Your account</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', alignItems: 'start' }}>
-        <ProfileSection user={user} />
-        <PasswordSection />
-      </div>
-    </div>
+      <main className="page">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <div className="overline">Account &amp; trust center</div>
+            <h1 className="page-title">My account</h1>
+          </div>
+          <ThemeSwitch />
+        </div>
+
+        <div className="acct-layout">
+          <div className="acct-side">
+            <div className="acct-profile-block"><ProfileSection user={user} /></div>
+
+            <section className="acct-stats-block card" style={{ padding: '10px' }} aria-label="Your selling summary">
+              <div className="stats-row">
+                <div className="stat"><div className="stat-value">{loadingListings ? '–' : live}</div><div className="stat-label">Live ads</div></div>
+                <div className="stat"><div className="stat-value">{loadingListings ? '–' : sold.length}</div><div className="stat-label">Sold</div></div>
+                <div className="stat" title={soldValue ? `Total asking price of sold items: ${formatPrice(soldValue)}` : undefined}>
+                  <div className="stat-value">{loadingListings ? '–' : formatCompactINR(soldValue)}</div>
+                  <div className="stat-label">Total sold</div>
+                </div>
+              </div>
+            </section>
+
+            <section className="acct-support-block" aria-labelledby="acc-support-title">
+              <h2 id="acc-support-title" className="section-title" style={{ marginBottom: '10px' }}>Account &amp; support</h2>
+              <div className="card list-group">
+                <Link to="/favorites" className="list-item">
+                  <span className="li-icon"><Heart size={18} /></span>
+                  <span style={{ flex: 1 }}>Saved ads</span>
+                  {savedCount !== null && savedCount > 0 && <span className="chip chip-neutral">{savedCount}</span>}
+                  <ChevronRight size={18} color="var(--text-muted)" />
+                </Link>
+                <div className="list-item">
+                  <span className="li-icon"><Bell size={18} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    Desktop alerts
+                    <span className="muted" style={{ display: 'block', fontSize: '0.76rem' }}>
+                      {desktopAlerts === 'granted' ? 'On — new messages and offers pop up even when Becho is in the background'
+                        : desktopAlerts === 'denied' ? 'Blocked in your browser settings'
+                          : desktopAlerts === 'unsupported' ? 'Not supported in this browser'
+                            : 'Get alerted about messages and offers'}
+                    </span>
+                  </span>
+                  {desktopAlerts === 'default' && <button type="button" className="btn btn-soft btn-sm" onClick={() => void enableDesktopAlerts()}>Turn on</button>}
+                  {desktopAlerts === 'granted' && <Chip tone="success">On</Chip>}
+                </div>
+                <button type="button" className="list-item" onClick={() => setShowPassword((v) => !v)} aria-expanded={showPassword} aria-controls="change-password">
+                  <span className="li-icon"><Lock size={18} /></span>
+                  <span style={{ flex: 1 }}>Change password</span>
+                  <ChevronRight size={18} color="var(--text-muted)" style={{ transform: showPassword ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }} />
+                </button>
+                <button type="button" className="list-item danger" onClick={() => { logout(); navigate('/'); }}>
+                  <span className="li-icon"><LogOut size={18} /></span>
+                  <span style={{ flex: 1 }}>Sign out</span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+              {showPassword && <div style={{ marginTop: '12px' }}><PasswordSection /></div>}
+            </section>
+          </div>
+
+          <div className="acct-main">
+            <div className="acct-listings-block">
+              <MyListingsPanel listings={listings} loading={loadingListings} reload={loadListings} notice={notice} />
+            </div>
+          </div>
+        </div>
+      </main>
+    </>
   );
 };

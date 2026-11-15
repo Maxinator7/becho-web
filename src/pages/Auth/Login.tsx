@@ -98,8 +98,9 @@ export const Login: React.FC = () => {
 
   return (
     <AuthCard
-      title={<>Welcome back to <span className="gradient-text">BECHO</span></>}
-      subtitle="Sign in to buy, sell and chat."
+      overline="Sign in"
+      title="Welcome back"
+      subtitle="Sign in to buy, sell and chat with people near you."
       footer={<>Don't have an account? <Link to="/register" style={linkStyle}>Create one</Link></>}
     >
       {state.notice && !formError && <Alert tone="success" style={{ marginBottom: '1rem' }}>{state.notice}</Alert>}
@@ -156,7 +157,7 @@ export const Login: React.FC = () => {
           disabled={loading}
           aria-busy={loading}
           className="btn-primary"
-          style={{ width: '100%', padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', opacity: loading ? 0.7 : 1, cursor: loading ? 'wait' : 'pointer' }}
+          style={{ width: '100%', minHeight: '48px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1, cursor: loading ? 'wait' : 'pointer' }}
         >
           <LogIn size={18} />
           {loading ? 'Signing in…' : 'Sign in'}

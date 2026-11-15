@@ -2,10 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
+import { Avatar, Chip, Sheet } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { formatPrice } from '../../utils/format';
-import { MessageSquare, Send, CheckCheck, Tag, TrendingDown, CheckCircle, XCircle, RotateCcw, X, Handshake, PackageCheck, Info } from 'lucide-react';
+import { formatPrice, timeAgo } from '../../utils/format';
+import { MessageCircle, Send, CheckCheck, Tag, TrendingDown, CheckCircle, XCircle, RotateCcw, X, Handshake, PackageCheck, Info, ArrowLeft, ArrowLeftRight, Lock } from 'lucide-react';
 
 interface ConversationItem {
   id: string;
@@ -14,7 +15,7 @@ interface ConversationItem {
   listing: { id: string; title: string; price: number; status: string; media: { url: string }[] };
   buyer: { id: string; displayName: string };
   seller: { id: string; displayName: string };
-  messages: { content: string; createdAt: string; isRead: boolean }[];
+  messages: { content: string; createdAt: string; isRead: boolean; senderId?: string }[];
 }
 
 interface MessageItem {
@@ -48,19 +49,36 @@ interface Offer {
   counterOffers?: { id: string; amount: number; status: string; createdAt: string }[];
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: 'var(--warning)',
-  ACCEPTED: 'var(--success)',
-  REJECTED: 'var(--danger)',
-  COUNTERED: 'var(--accent-primary)',
-  CANCELLED: 'var(--text-muted)',
-  EXPIRED: 'var(--text-muted)',
+const OFFER_TONES: Record<string, 'warning' | 'success' | 'danger' | 'primary' | 'neutral'> = {
+  PENDING: 'warning',
+  ACCEPTED: 'success',
+  REJECTED: 'danger',
+  COUNTERED: 'primary',
+  CANCELLED: 'neutral',
+  EXPIRED: 'neutral',
+};
+const OFFER_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Pending',
+  ACCEPTED: 'Accepted',
+  REJECTED: 'Declined',
+  COUNTERED: 'Countered',
+  CANCELLED: 'Withdrawn',
+  EXPIRED: 'Expired',
+};
+/** Status pill for event rows that aren't tied to a live offer. */
+const EVENT_LABELS: Record<string, { label: string; tone: 'warning' | 'success' | 'danger' | 'primary' | 'neutral' }> = {
+  OFFER_ACCEPTED: { label: 'Accepted', tone: 'success' },
+  OFFER_REJECTED: { label: 'Declined', tone: 'danger' },
+  OFFER_WITHDRAWN: { label: 'Withdrawn', tone: 'neutral' },
+  LISTING_SOLD: { label: 'Sold', tone: 'neutral' },
+  RESERVATION_RELEASED: { label: 'Back on sale', tone: 'warning' },
 };
 const tint = (color: string, pct = 13) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+const isDesktop = () => typeof window !== 'undefined' && window.matchMedia('(min-width: 641px)').matches;
 
 const EVENT_ICONS: Record<string, { Icon: typeof Tag; color: string }> = {
   OFFER_MADE: { Icon: Tag, color: 'var(--warning)' },
-  OFFER_COUNTERED: { Icon: RotateCcw, color: 'var(--accent-primary)' },
+  OFFER_COUNTERED: { Icon: ArrowLeftRight, color: 'var(--primary-text)' },
   OFFER_ACCEPTED: { Icon: Handshake, color: 'var(--success)' },
   OFFER_REJECTED: { Icon: XCircle, color: 'var(--danger)' },
   OFFER_WITHDRAWN: { Icon: X, color: 'var(--text-muted)' },
@@ -95,12 +113,25 @@ export const Chat: React.FC = () => {
 
   const [dealBusy, setDealBusy] = useState(false);
 
+  // Phones show either the conversation list or one thread.
+  const [mobileView, setMobileView] = useState<'list' | 'thread'>(initialConversationId ? 'thread' : 'list');
+
+  // Buyer: make an offer from the chat.
+  const [showNewOffer, setShowNewOffer] = useState(false);
+  const [newOfferAmount, setNewOfferAmount] = useState('');
+  const [newOfferMessage, setNewOfferMessage] = useState('');
+  const [newOfferError, setNewOfferError] = useState('');
+  const [sendingOffer, setSendingOffer] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageId = useRef<string | null>(null);
 
   // Clicking a notification while already on /chat only changes the query string.
   useEffect(() => {
-    if (initialConversationId) setActiveConversationId(initialConversationId);
+    if (initialConversationId) {
+      setActiveConversationId(initialConversationId);
+      setMobileView('thread');
+    }
   }, [initialConversationId]);
 
 
@@ -108,7 +139,8 @@ export const Chat: React.FC = () => {
     const res = await fetchApi<ConversationItem[]>('/conversations');
     if (res.success && res.data) {
       setConversations(res.data);
-      if (!activeConversationId && res.data.length > 0) setActiveConversationId(res.data[0].id);
+      // On wide screens open the latest conversation; on phones wait for a tap (opening marks it read).
+      if (!activeConversationId && res.data.length > 0 && isDesktop()) setActiveConversationId(res.data[0].id);
     }
     setLoading(false);
   };
@@ -243,342 +275,380 @@ export const Chat: React.FC = () => {
     }
   };
 
+  const openConversation = (id: string) => {
+    setActiveConversationId(id);
+    setMobileView('thread');
+  };
+
+  const openNewOffer = () => {
+    if (!activeConversation) return;
+    setNewOfferAmount(String(Math.floor(Number(activeConversation.listing.price) * 0.9)));
+    setNewOfferMessage('');
+    setNewOfferError('');
+    setShowNewOffer(true);
+  };
+
+  const handleSubmitNewOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeConversation) return;
+    const amount = parseFloat(newOfferAmount);
+    if (isNaN(amount) || amount <= 0) { setNewOfferError('Please enter a valid offer amount.'); return; }
+    setSendingOffer(true);
+    const res = await fetchApi<Offer>('/offers', {
+      method: 'POST',
+      body: JSON.stringify({ listingId: activeConversation.listingId, amount, message: newOfferMessage || undefined }),
+    });
+    setSendingOffer(false);
+    if (res.success) {
+      setShowNewOffer(false);
+      loadOffers(activeConversation);
+      loadMessages(activeConversation.id);
+      loadConversations();
+    } else {
+      setNewOfferError(res.error?.message || 'Failed to submit offer.');
+    }
+  };
+
   const pendingOffers = offers.filter((o) => o.status === 'PENDING');
   const acceptedOffer = offers.find((o) => o.status === 'ACCEPTED');
   const listingStatus = activeConversation?.listing.status;
   const iAmSeller = !!activeConversation && activeConversation.seller.id === user?.id;
   const awaitingMyReply = pendingOffers.some((o) => o.proposedById !== user?.id);
 
+  const otherParty = activeConversation ? (iAmSeller ? activeConversation.buyer : activeConversation.seller) : null;
+  const myPendingOffer = pendingOffers.some((o) => o.proposedById === user?.id);
+  const canMakeOffer = !!activeConversation && !iAmSeller && listingStatus === 'LIVE' && !myPendingOffer;
+  const offerById = (id?: string | null) => (id ? offers.find((o) => o.id === id) : undefined);
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+    <>
       <Navbar />
 
-      {/* Counter Offer Modal */}
+      {/* Counter offer */}
       {showCounterModal && counterTargetOffer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', padding: '2rem', borderRadius: '20px', position: 'relative' }}>
-            <button onClick={() => { setShowCounterModal(false); setCounterError(''); }} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-              <X size={22} />
-            </button>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <RotateCcw size={18} color="var(--accent-primary)" /> Counter Offer
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-              Their offer: <strong style={{ color: 'var(--warning)' }}>{formatPrice(counterTargetOffer.amount)}</strong>
-            </p>
-            <form onSubmit={handleSubmitCounter} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Your Counter Amount (₹)</label>
+        <Sheet title={<><RotateCcw size={18} color="var(--primary-text)" /> Counter offer</>} labelId="counter-title" onClose={() => { setShowCounterModal(false); setCounterError(''); }}>
+          <p className="secondary" style={{ fontSize: '0.88rem', marginBottom: '14px' }}>
+            Their offer: <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(counterTargetOffer.amount)}</strong>
+          </p>
+          <form onSubmit={handleSubmitCounter} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label htmlFor="counter-amount-input" className="field-label">Your counter amount</label>
+              <div className="price-input">
+                <span className="cur" aria-hidden="true">₹</span>
                 <input
                   id="counter-amount-input"
-                  type="number" min="1" step="0.01"
+                  type="number" min="1" step="0.01" inputMode="decimal"
                   value={counterAmount}
                   onChange={(e) => setCounterAmount(e.target.value)}
                   required
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)', fontSize: '1.05rem', fontWeight: 700, outline: 'none', boxSizing: 'border-box' }}
                 />
               </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '0.35rem' }}>Message (optional)</label>
-                <textarea
-                  value={counterMessage}
-                  onChange={(e) => setCounterMessage(e.target.value)}
-                  placeholder="e.g. Best I can do..."
-                  rows={2}
-                  style={{ width: '100%', padding: '0.7rem 1rem', borderRadius: '10px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)', fontSize: '0.9rem', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
-                />
-              </div>
-              {counterError && <div style={{ color: 'var(--danger)', fontSize: '0.85rem' }}>{counterError}</div>}
-              <button
-                id="counter-submit-btn"
-                type="submit"
-                disabled={!!actingOnOffer}
-                className="btn-primary"
-                style={{ padding: '0.8rem', fontWeight: 700, opacity: actingOnOffer ? 0.7 : 1 }}
-              >
-                {actingOnOffer ? 'Sending...' : 'Send Counter Offer'}
-              </button>
-            </form>
-          </div>
-        </div>
+            </div>
+            <div>
+              <label htmlFor="counter-message-input" className="field-label">Message <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+              <textarea id="counter-message-input" className="input" value={counterMessage} onChange={(e) => setCounterMessage(e.target.value)} placeholder="e.g. Best I can do…" rows={2} />
+            </div>
+            {counterError && <div role="alert" className="remark-box danger" style={{ color: 'var(--danger)' }}>{counterError}</div>}
+            <button id="counter-submit-btn" type="submit" disabled={!!actingOnOffer} className="btn-primary btn-lg btn-block">
+              {actingOnOffer ? 'Sending…' : 'Send counter offer'}
+            </button>
+          </form>
+        </Sheet>
       )}
 
-      <h1 style={{ fontSize: '1.75rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <MessageSquare color="var(--accent-primary)" /> Buyer-Seller Messages
-      </h1>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.5rem', height: '650px' }}>
-        {/* Left: Conversation List */}
-        <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', overflowY: 'auto', borderRadius: '16px' }}>
-          <h3 style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Conversations ({conversations.length})
-          </h3>
-
-          {loading ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading conversations...</div>
-          ) : conversations.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No messages yet. Browse listings to contact sellers!</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {conversations.map((conv) => {
-                const otherUser = conv.buyer.id === user?.id ? conv.seller : conv.buyer;
-                const lastMsg = conv.messages && conv.messages.length > 0 ? conv.messages[0].content : 'Conversation started';
-                const isSelected = activeConversationId === conv.id;
-                const thumb = conv.listing.media && conv.listing.media.length > 0 ? conv.listing.media[0].url : undefined;
-                return (
-                  <div
-                    key={conv.id}
-                    onClick={() => setActiveConversationId(conv.id)}
-                    style={{
-                      padding: '0.85rem', borderRadius: '12px',
-                      background: isSelected ? 'rgba(99,102,241,0.2)' : 'var(--surface-1)',
-                      border: isSelected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                      cursor: 'pointer', display: 'flex', gap: '0.75rem', alignItems: 'center',
-                    }}
-                  >
-                    {thumb ? (
-                      <img src={thumb} alt={conv.listing.title} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} />
-                    ) : (
-                      <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Tag size={20} color="var(--text-secondary)" />
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{conv.listing.title}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--accent-secondary)', margin: '0.15rem 0' }}>{otherUser.displayName}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastMsg}</div>
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Buyer: new offer */}
+      {showNewOffer && activeConversation && (
+        <Sheet title={<><Tag size={18} color="var(--primary-text)" /> Make an offer</>} labelId="chat-offer-title" onClose={() => setShowNewOffer(false)}>
+          <p className="secondary" style={{ fontSize: '0.88rem', marginBottom: '14px' }}>
+            Listed at <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(activeConversation.listing.price)}</strong>.
+          </p>
+          <form onSubmit={handleSubmitNewOffer} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label htmlFor="chat-offer-amount" className="field-label">Your offer</label>
+              <div className="price-input">
+                <span className="cur" aria-hidden="true">₹</span>
+                <input id="chat-offer-amount" type="number" min="1" step="0.01" inputMode="decimal" value={newOfferAmount} onChange={(e) => setNewOfferAmount(e.target.value)} required />
+              </div>
             </div>
-          )}
-        </div>
+            <div>
+              <label htmlFor="chat-offer-message" className="field-label">Message <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
+              <textarea id="chat-offer-message" className="input" value={newOfferMessage} onChange={(e) => setNewOfferMessage(e.target.value)} placeholder="e.g. I can pick it up today" rows={2} />
+            </div>
+            {newOfferError && <div role="alert" className="remark-box danger" style={{ color: 'var(--danger)' }}>{newOfferError}</div>}
+            <button type="submit" disabled={sendingOffer} className="btn-primary btn-lg btn-block">{sendingOffer ? 'Sending offer…' : 'Send offer'}</button>
+          </form>
+        </Sheet>
+      )}
 
-        {/* Right: Active Thread */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', borderRadius: '16px', overflow: 'hidden' }}>
-          {activeConversation ? (
-            <>
-              {/* Header */}
-              <div style={{ padding: '1rem 1.5rem', background: 'var(--surface-1)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  {activeConversation.listing.media && activeConversation.listing.media.length > 0 && (
-                    <img src={activeConversation.listing.media[0].url} alt="" style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover' }} />
-                  )}
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '1rem' }}>{activeConversation.listing.title}</div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', fontWeight: 600 }}>{formatPrice(activeConversation.listing.price)}</div>
+      {/* Negotiation history + actions */}
+      {showOfferPanel && (
+        <Sheet title={<><TrendingDown size={18} color="var(--primary-text)" /> Offers</>} labelId="offers-title" onClose={() => setShowOfferPanel(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+            {offers.length === 0 && <p className="muted" style={{ fontSize: '0.9rem' }}>No offers yet.</p>}
+            {offers.map((offer) => {
+              // The proposer can withdraw; only the other party can accept, counter or reject.
+              const isMine = offer.proposedById === user?.id;
+              const canAct = !isMine && offer.status === 'PENDING';
+              const canCancel = isMine && offer.status === 'PENDING';
+              return (
+                <div key={offer.id} className="card" style={{ padding: '12px 14px', borderColor: offer.status === 'PENDING' ? 'var(--warning-border)' : undefined }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <div>
+                      <div className="price" style={{ fontSize: '1.1rem' }}>{formatPrice(offer.amount)}</div>
+                      <div className="muted" style={{ fontSize: '0.78rem' }}>
+                        from {isMine ? 'you' : offer.proposedBy.displayName} · {new Date(offer.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </div>
+                    </div>
+                    <Chip tone={OFFER_TONES[offer.status] ?? 'neutral'} upper>{OFFER_STATUS_LABELS[offer.status] ?? offer.status}</Chip>
                   </div>
+                  {offer.message && <p className="secondary" style={{ fontSize: '0.84rem', marginTop: '6px', fontStyle: 'italic' }}>“{offer.message}”</p>}
+                  {offer.parentOffer && (
+                    <p className="muted" style={{ fontSize: '0.76rem', marginTop: '4px' }}>In reply to {formatPrice(offer.parentOffer.amount)}</p>
+                  )}
+                  {(canAct || canCancel) && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      {canAct && (
+                        <>
+                          <button id={`accept-offer-${offer.id}`} type="button" className="btn btn-deal btn-sm" style={{ flex: 1 }} onClick={() => { setShowOfferPanel(false); void handleOfferAction(offer.id, 'accept'); }} disabled={!!actingOnOffer}>
+                            <CheckCircle size={14} /> Accept
+                          </button>
+                          <button id={`counter-offer-${offer.id}`} type="button" className="btn btn-soft btn-sm" style={{ flex: 1 }} onClick={() => { setShowOfferPanel(false); handleOpenCounter(offer); }} disabled={!!actingOnOffer}>
+                            <RotateCcw size={14} /> Counter
+                          </button>
+                          <button id={`reject-offer-${offer.id}`} type="button" className="btn btn-danger-outline btn-sm" style={{ flex: 1 }} onClick={() => handleOfferAction(offer.id, 'reject')} disabled={!!actingOnOffer}>
+                            <XCircle size={14} /> Decline
+                          </button>
+                        </>
+                      )}
+                      {canCancel && (
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => handleOfferAction(offer.id, 'cancel')} disabled={!!actingOnOffer}>
+                          Withdraw offer
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              );
+            })}
+          </div>
+        </Sheet>
+      )}
+
+      <main className="page chat-page">
+        <div className="chat-layout" data-view={mobileView}>
+          {/* Conversation list */}
+          <section className="chat-list" aria-labelledby="chat-list-title">
+            <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border-color)' }}>
+              <div className="overline">Messages</div>
+              <h1 id="chat-list-title" className="page-title" style={{ fontSize: '1.3rem' }}>Chats</h1>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {loading ? (
+                <div className="muted" style={{ padding: '32px 16px', textAlign: 'center' }}>Loading conversations…</div>
+              ) : conversations.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon"><MessageCircle size={24} /></div>
+                  <h2 className="section-title" style={{ fontSize: '1rem', marginBottom: '4px' }}>No chats yet</h2>
+                  <p className="secondary" style={{ fontSize: '0.88rem', marginBottom: '16px' }}>Open a listing and tap “Chat” to message the seller.</p>
+                  <button type="button" className="btn-primary" onClick={() => navigate('/browse')}>Explore listings</button>
+                </div>
+              ) : (
+                conversations.map((conv) => {
+                  const other = conv.buyer.id === user?.id ? conv.seller : conv.buyer;
+                  const last = conv.messages && conv.messages.length > 0 ? conv.messages[0] : null;
+                  const unread = !!last && !!last.senderId && last.senderId !== user?.id && !last.isRead;
+                  const isSelected = activeConversationId === conv.id;
+                  const thumb = conv.listing.media && conv.listing.media.length > 0 ? conv.listing.media[0].url : undefined;
+                  return (
+                    <button key={conv.id} type="button" className={`conv-row${isSelected ? ' on' : ''}`} onClick={() => openConversation(conv.id)} aria-current={isSelected ? 'true' : undefined}>
+                      {thumb ? <img src={thumb} alt="" className="conv-thumb" /> : <span className="conv-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Tag size={20} color="var(--text-muted)" /></span>}
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+                          <span style={{ fontWeight: unread ? 700 : 600, fontSize: '0.92rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{other.displayName}</span>
+                          <span className="muted" style={{ fontSize: '0.72rem', flexShrink: 0 }}>{timeAgo(conv.lastMessageAt)}</span>
+                        </span>
+                        <span className="secondary" style={{ display: 'block', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.listing.title}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="muted" style={{ flex: 1, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: unread ? 'var(--text-primary)' : undefined, fontWeight: unread ? 600 : 400 }}>
+                            {last ? last.content : 'Conversation started'}
+                          </span>
+                          {unread && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--primary)', flexShrink: 0 }} />}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          {/* Thread */}
+          <section className="chat-thread" aria-label="Conversation">
+            {activeConversation && otherParty ? (
+              <>
+                <div className="chat-head">
+                  <button type="button" className="icon-btn mobile-only" onClick={() => setMobileView('list')} aria-label="Back to chats"><ArrowLeft size={22} /></button>
+                  <Avatar name={otherParty.displayName} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.98rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{otherParty.displayName}</div>
+                    <div className="muted" style={{ fontSize: '0.76rem' }}>{iAmSeller ? 'Interested buyer' : 'Seller'}</div>
+                  </div>
                   {offers.length > 0 && (
                     <button
                       id="offers-panel-btn"
+                      type="button"
                       onClick={() => setShowOfferPanel(!showOfferPanel)}
                       aria-expanded={showOfferPanel}
-                      style={{
-                        padding: '0.4rem 0.85rem', fontSize: '0.8rem', fontWeight: 700,
-                        borderRadius: '20px', border: `1px solid ${awaitingMyReply ? 'var(--warning)' : 'var(--border-strong)'}`,
-                        background: awaitingMyReply ? tint('var(--warning)') : 'var(--surface-2)',
-                        color: awaitingMyReply ? 'var(--warning)' : 'var(--text-primary)', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: '0.4rem',
-                      }}
+                      className={`btn btn-sm ${awaitingMyReply ? '' : 'btn-outline'}`}
+                      style={awaitingMyReply ? { background: tint('var(--warning)'), color: 'var(--warning)', borderColor: 'var(--warning-border)' } : undefined}
                     >
                       <TrendingDown size={14} />
-                      {awaitingMyReply ? 'Offer waiting for you' : pendingOffers.length ? `${pendingOffers.length} pending offer${pendingOffers.length > 1 ? 's' : ''}` : 'Offer history'}
+                      {awaitingMyReply ? 'Offer waiting' : pendingOffers.length ? `${pendingOffers.length} pending` : 'Offers'}
                     </button>
                   )}
-                  <button onClick={() => navigate(`/listings/${activeConversation.listing.id}`)} className="btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem' }}>
-                    View Listing
-                  </button>
                 </div>
-              </div>
 
-              {/* Deal status */}
-              {listingStatus === 'RESERVED' && acceptedOffer && (
-                <div style={{ padding: '0.9rem 1.5rem', background: tint('var(--success)', 10), borderBottom: `1px solid ${tint('var(--success)', 35)}`, display: 'flex', gap: '1rem', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start', minWidth: 0 }}>
-                    <Handshake size={20} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                    <div>
-                      <div style={{ fontWeight: 700, color: 'var(--success)' }}>Deal agreed at {formatPrice(acceptedOffer.amount)}</div>
-                      <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)' }}>
-                        {iAmSeller
-                          ? `Reserved for ${acceptedOffer.buyer.displayName}. Arrange a meet-up here, then mark it as sold once you've been paid.`
-                          : 'The seller has reserved this item for you. Agree a time and a safe public place to meet, check the item, then pay on handover.'}
-                      </div>
+                <div className="listing-strip">
+                  {activeConversation.listing.media && activeConversation.listing.media.length > 0 && <img src={activeConversation.listing.media[0].url} alt="" />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeConversation.listing.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="price" style={{ fontSize: '1rem' }}>{formatPrice(activeConversation.listing.price)}</span>
+                      <span className="chip chip-neutral chip-square" style={{ fontSize: '0.66rem' }}>Listed price</span>
                     </div>
                   </div>
-                  {iAmSeller && (
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        onClick={() => handleDealAction('mark-sold')}
-                        disabled={dealBusy}
-                        style={{ padding: '0.45rem 0.9rem', borderRadius: '8px', background: 'var(--success)', color: '#fff', fontWeight: 700, fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.35rem', opacity: dealBusy ? 0.6 : 1 }}
-                      >
-                        <PackageCheck size={14} /> Mark as sold
-                      </button>
-                      <button
-                        onClick={() => handleDealAction('mark-available')}
-                        disabled={dealBusy}
-                        style={{ padding: '0.45rem 0.9rem', borderRadius: '8px', background: 'var(--surface-2)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.82rem', opacity: dealBusy ? 0.6 : 1 }}
-                      >
-                        Cancel reservation
-                      </button>
-                    </div>
-                  )}
+                  <button type="button" className="link" style={{ fontSize: '0.85rem', flexShrink: 0 }} onClick={() => navigate(`/listings/${activeConversation.listing.id}`)}>View ad</button>
                 </div>
-              )}
-              {listingStatus === 'RESERVED' && !acceptedOffer && (
-                <div style={{ padding: '0.7rem 1.5rem', background: 'var(--surface-2)', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <Info size={16} /> This item is reserved for another buyer. You'll be notified here if it becomes available again.
-                </div>
-              )}
-              {listingStatus === 'SOLD' && (
-                <div style={{ padding: '0.7rem 1.5rem', background: 'var(--surface-2)', borderBottom: '1px solid var(--border-color)', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <PackageCheck size={16} /> This item has been sold.
-                </div>
-              )}
 
-              {/* Offer Panel */}
-              {showOfferPanel && (
-                <div style={{ padding: '1rem 1.5rem', background: 'rgba(245,158,11,0.06)', borderBottom: '1px solid rgba(245,158,11,0.2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <TrendingDown size={14} /> Negotiation
-                    </h4>
-                    <button onClick={() => setShowOfferPanel(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><X size={16} /></button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', maxHeight: '240px', overflowY: 'auto' }}>
-                    {offers.map((offer) => {
-                      // The proposer can withdraw; only the other party can accept, counter or reject.
-                      const isMine = offer.proposedById === user?.id;
-                      const canAct = !isMine && offer.status === 'PENDING';
-                      const canCancel = isMine && offer.status === 'PENDING';
-                      return (
-                        <div key={offer.id} style={{ padding: '0.85rem 1rem', borderRadius: '10px', background: 'var(--surface-1)', border: `1px solid ${STATUS_COLORS[offer.status] || 'var(--border-color)'}` }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <span style={{ fontWeight: 700, fontSize: '1rem', color: STATUS_COLORS[offer.status] }}>{formatPrice(offer.amount)}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginLeft: '0.6rem' }}>
-                                from {isMine ? 'you' : offer.proposedBy.displayName} · {new Date(offer.createdAt).toLocaleDateString('en-IN')}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '10px', background: tint(STATUS_COLORS[offer.status]), color: STATUS_COLORS[offer.status], fontWeight: 700 }}>
-                              {offer.status}
-                            </span>
+                {/* Deal status */}
+                {listingStatus === 'RESERVED' && acceptedOffer && (
+                  <div className="deal-panel" role="status">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', minWidth: 0 }}>
+                        <Handshake size={22} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <div>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>Deal agreed for {formatPrice(acceptedOffer.amount)}!</div>
+                          <div className="secondary" style={{ fontSize: '0.82rem', lineHeight: 1.4 }}>
+                            {iAmSeller
+                              ? `Reserved for ${acceptedOffer.buyer.displayName}. Arrange a meet-up here, then mark it as sold once you've been paid.`
+                              : 'The seller has reserved this item for you. Agree a time and a safe public place to meet, check the item, then pay on handover.'}
                           </div>
-                          {offer.message && <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem', fontStyle: 'italic' }}>"{offer.message}"</p>}
-                          {offer.parentOffer && (
-                            <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                              ↩ In reply to {formatPrice(offer.parentOffer.amount)}
-                            </p>
-                          )}
-                          {(canAct || canCancel) && (
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                              {canAct && (
-                                <>
-                                  <button
-                                    id={`accept-offer-${offer.id}`}
-                                    onClick={() => handleOfferAction(offer.id, 'accept')}
-                                    disabled={!!actingOnOffer}
-                                    style={{ flex: 1, padding: '0.45rem 0.75rem', borderRadius: '8px', background: 'rgba(34,197,94,0.15)', border: '1px solid #22c55e', color: 'var(--success)', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}
-                                  >
-                                    <CheckCircle size={13} /> Accept
-                                  </button>
-                                  <button
-                                    id={`counter-offer-${offer.id}`}
-                                    onClick={() => handleOpenCounter(offer)}
-                                    disabled={!!actingOnOffer}
-                                    style={{ flex: 1, padding: '0.45rem 0.75rem', borderRadius: '8px', background: 'rgba(129,140,248,0.15)', border: '1px solid #818cf8', color: '#818cf8', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}
-                                  >
-                                    <RotateCcw size={13} /> Counter
-                                  </button>
-                                  <button
-                                    id={`reject-offer-${offer.id}`}
-                                    onClick={() => handleOfferAction(offer.id, 'reject')}
-                                    disabled={!!actingOnOffer}
-                                    style={{ flex: 1, padding: '0.45rem 0.75rem', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: 'var(--danger)', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}
-                                  >
-                                    <XCircle size={13} /> Reject
-                                  </button>
-                                </>
-                              )}
-                              {canCancel && (
-                                <button
-                                  onClick={() => handleOfferAction(offer.id, 'cancel')}
-                                  disabled={!!actingOnOffer}
-                                  style={{ padding: '0.45rem 0.75rem', borderRadius: '8px', background: 'rgba(107,114,128,0.15)', border: '1px solid #6b7280', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}
-                                >
-                                  Cancel
-                                </button>
-                              )}
+                        </div>
+                      </div>
+                      <span className="chip chip-upper chip-solid-success" style={{ flexShrink: 0 }}><Lock size={11} /> Reserved</span>
+                    </div>
+                    {iAmSeller && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button type="button" onClick={() => handleDealAction('mark-sold')} disabled={dealBusy} className="btn btn-deal" style={{ flex: 1 }}>
+                          <PackageCheck size={16} /> Mark as sold
+                        </button>
+                        <button type="button" onClick={() => handleDealAction('mark-available')} disabled={dealBusy} className="btn btn-outline" style={{ flex: 1 }}>
+                          Cancel reservation
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {listingStatus === 'RESERVED' && !acceptedOffer && (
+                  <div className="info-strip"><Info size={16} style={{ flexShrink: 0 }} /> This item is reserved for another buyer. You'll be notified here if it becomes available again.</div>
+                )}
+                {listingStatus === 'SOLD' && (
+                  <div className="info-strip"><PackageCheck size={16} style={{ flexShrink: 0 }} /> This item has been sold.</div>
+                )}
+
+                {/* Messages */}
+                <div className="thread">
+                  {messages.map((msg) => {
+                    const isMe = msg.senderId === user?.id;
+                    if (msg.kind === 'EVENT') {
+                      const event = msg.metadata?.event ?? '';
+                      const { Icon, color } = EVENT_ICONS[event] ?? { Icon: Info, color: 'var(--text-secondary)' };
+                      const isOfferEvent = event === 'OFFER_MADE' || event === 'OFFER_COUNTERED';
+                      const offer = isOfferEvent ? offerById(msg.metadata?.offerId) : undefined;
+                      const pill = offer
+                        ? { label: OFFER_STATUS_LABELS[offer.status] ?? offer.status, tone: OFFER_TONES[offer.status] ?? 'neutral' }
+                        : EVENT_LABELS[event];
+                      const canRespond = isOfferEvent && !isMe && offer?.status === 'PENDING';
+                      const amount = msg.metadata?.amount;
+                      return (
+                        <div key={msg.id} style={{ alignSelf: 'center', width: 'min(100%, 360px)' }}>
+                          <div className="event-card" style={{ width: '100%' }}>
+                            <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tint(color) }}>
+                              <Icon size={17} color={color} />
+                            </span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div className="secondary" style={{ fontSize: '0.8rem', lineHeight: 1.35 }}>{(() => {
+                                const text = isMe ? msg.content.replace(msg.sender.displayName, 'You') : msg.content;
+                                // The amount is shown large below, so drop it from the sentence.
+                                return amount !== undefined && amount !== null ? text.replace(/\s+(of|with|at|for)\s+₹[\d,]+(\.\d+)?\s*$/, '') : text;
+                              })()}</div>
+                              {amount !== undefined && amount !== null && <div className="price" style={{ fontSize: '1.1rem' }}>{formatPrice(Number(amount))}</div>}
                             </div>
-                          )}
+                            {pill && <Chip tone={pill.tone} square style={{ flexShrink: 0 }}>{pill.label}</Chip>}
+                          </div>
+                          <div className="muted" style={{ fontSize: '0.7rem', marginTop: '4px', textAlign: 'center' }}>
+                            {new Date(msg.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            {canRespond && (
+                              <> · <button type="button" onClick={() => setShowOfferPanel(true)} className="link" style={{ fontSize: '0.74rem' }}>Respond</button></>
+                            )}
+                          </div>
                         </div>
                       );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Message Thread */}
-              <div style={{ flex: 1, padding: '1.5rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {messages.map((msg) => {
-                  const isMe = msg.senderId === user?.id;
-                  if (msg.kind === 'EVENT') {
-                    const { Icon, color } = EVENT_ICONS[msg.metadata?.event ?? ''] ?? { Icon: Info, color: 'var(--text-secondary)' };
-                    const action = msg.metadata?.event === 'OFFER_MADE' || msg.metadata?.event === 'OFFER_COUNTERED';
+                    }
                     return (
-                      <div key={msg.id} style={{ alignSelf: 'center', maxWidth: '85%', textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.9rem', borderRadius: '999px', background: tint(color, 12), border: `1px solid ${tint(color, 35)}`, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                          <Icon size={15} color={color} style={{ flexShrink: 0 }} />
-                          <span>{isMe ? msg.content.replace(msg.sender.displayName, 'You') : msg.content}</span>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                          {new Date(msg.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                          {action && !isMe && pendingOffers.some((o) => o.id === msg.metadata?.offerId) && (
-                            <> · <button onClick={() => setShowOfferPanel(true)} style={{ color: 'var(--accent-primary)', fontWeight: 600, fontSize: '0.75rem' }}>Respond</button></>
-                          )}
+                      <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: 'min(78%, 520px)' }}>
+                        {!isMe && <div className="muted" style={{ fontSize: '0.72rem', fontWeight: 600, marginBottom: '3px' }}>{msg.sender.displayName}</div>}
+                        <div className={`bubble ${isMe ? 'mine' : 'theirs'}`}>{msg.content}</div>
+                        <div className="muted" style={{ fontSize: '0.7rem', marginTop: '3px', display: 'flex', alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start', gap: '4px' }}>
+                          <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {isMe && <><span>·</span><CheckCheck size={13} color={msg.isRead ? 'var(--primary-text)' : 'var(--text-muted)'} aria-label={msg.isRead ? 'Read' : 'Sent'} /></>}
                         </div>
                       </div>
                     );
-                  }
-                  return (
-                    <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
-                      <div style={{ padding: '0.85rem 1.15rem', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: isMe ? 'linear-gradient(135deg, var(--accent-primary), #4f46e5)' : 'var(--surface-3)', color: isMe ? 'var(--text-on-accent)' : 'var(--text-primary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                        {msg.content}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.25rem', textAlign: isMe ? 'right' : 'left', display: 'flex', alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start', gap: '0.25rem' }}>
-                        <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {isMe && <CheckCheck size={12} color={msg.isRead ? 'var(--accent-secondary)' : 'var(--text-secondary)'} />}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
 
-              {/* Input */}
-              <form onSubmit={handleSendMessage} style={{ padding: '1rem 1.5rem', background: 'var(--surface-sunken)', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '0.75rem' }}>
-                <input
-                  type="text"
-                  placeholder="Type your message..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  style={{ flex: 1, padding: '0.75rem 1rem', borderRadius: '24px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)', outline: 'none', fontSize: '0.95rem' }}
-                />
-                <button type="submit" disabled={!newMessage.trim() || sending} className="btn-primary" style={{ borderRadius: '50%', width: '42px', height: '42px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: !newMessage.trim() ? 0.5 : 1 }}>
-                  <Send size={18} />
-                </button>
-              </form>
-            </>
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
-              Select a conversation to start chatting.
-            </div>
-          )}
+                {/* Composer */}
+                <div className="composer-wrap">
+                  {(canMakeOffer || awaitingMyReply || offers.length > 0) && (
+                    <div className="quick-chips">
+                      {awaitingMyReply && (
+                        <button type="button" className="quick-chip warn" onClick={() => setShowOfferPanel(true)}><TrendingDown size={14} /> Respond to offer</button>
+                      )}
+                      {canMakeOffer && (
+                        <button type="button" className="quick-chip" onClick={openNewOffer}><Tag size={14} /> Make an offer</button>
+                      )}
+                      {offers.length > 0 && !awaitingMyReply && (
+                        <button type="button" className="quick-chip" onClick={() => setShowOfferPanel(true)}><RotateCcw size={14} /> Offer history</button>
+                      )}
+                    </div>
+                  )}
+                  <form onSubmit={handleSendMessage} className="composer">
+                    <label htmlFor="chat-input" className="sr-only">Message</label>
+                    <input
+                      id="chat-input"
+                      type="text"
+                      placeholder="Type a message…"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      autoComplete="off"
+                    />
+                    <button type="submit" className="send" disabled={!newMessage.trim() || sending} aria-label="Send">
+                      <Send size={18} />
+                    </button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state" style={{ margin: 'auto' }}>
+                <div className="empty-icon"><MessageCircle size={24} /></div>
+                <p className="secondary">{conversations.length ? 'Select a conversation to start chatting.' : 'Your conversations will appear here.'}</p>
+              </div>
+            )}
+          </section>
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 };

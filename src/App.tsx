@@ -16,7 +16,6 @@ import { VerifyAccount } from './pages/Auth/VerifyAccount';
 import { ForgotPassword } from './pages/Auth/ForgotPassword';
 import { Account } from './pages/Account/Account';
 import { CreateListing } from './pages/Marketplace/CreateListing';
-import { MyListings } from './pages/Marketplace/MyListings';
 import { AdminRedirect, NotFound } from './pages/NotFound';
 
 export const App: React.FC = () => {
@@ -37,7 +36,8 @@ export const App: React.FC = () => {
                 <Route path="/verify" element={<RequireAuth><VerifyAccount /></RequireAuth>} />
                 <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
                 <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
-                <Route path="/my-listings" element={<RequireAuth><MyListings /></RequireAuth>} />
+                {/* My listings now lives on the account page; this opens it at the listings section. */}
+                <Route path="/my-listings" element={<RequireAuth><Account section="listings" /></RequireAuth>} />
                 <Route path="/create-listing" element={<RequireAuth verified><CreateListing /></RequireAuth>} />
                 <Route path="/listings/:id/edit" element={<RequireAuth verified><CreateListing /></RequireAuth>} />
                 <Route path="/admin/*" element={<AdminRedirect />} />

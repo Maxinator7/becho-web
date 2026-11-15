@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, MessageSquare, Tag, CheckCircle, XCircle, RotateCcw, ShieldAlert, ShieldCheck, Clock, PencilLine, MessageSquareText } from 'lucide-react';
 import { fetchApi } from '../api/client';
 import { AppNotification, notificationLink, useNotifications } from '../context/NotificationsContext';
+import { timeAgo } from '../utils/format';
 
 const ICONS: Record<string, { Icon: typeof Bell; color: string }> = {
   MESSAGE_RECEIVED: { Icon: MessageSquare, color: 'var(--accent-primary)' },
@@ -21,13 +22,6 @@ const ICONS: Record<string, { Icon: typeof Bell; color: string }> = {
   LISTING_REMARK: { Icon: MessageSquareText, color: 'var(--accent-primary)' },
 };
 
-function timeAgo(iso: string) {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-}
 
 export const NotificationBell: React.FC = () => {
   const { unreadCount, refresh, desktopAlerts, enableDesktopAlerts } = useNotifications();
@@ -82,29 +76,27 @@ export const NotificationBell: React.FC = () => {
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         type="button"
+        className="icon-btn"
         onClick={() => setOpen((o) => !o)}
         aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+        aria-expanded={open}
         title="Notifications"
-        style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer', padding: 0 }}
       >
-        <Bell size={17} />
-        {unreadCount > 0 && (
-          <span style={{ position: 'absolute', top: '-4px', right: '-4px', minWidth: '18px', height: '18px', padding: '0 5px', borderRadius: '9px', background: 'var(--danger)', color: '#fff', fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
+        <Bell size={21} />
+        {unreadCount > 0 && <span className="badge-dot" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}
       </button>
 
       {open && (
         <div
           role="dialog"
           aria-label="Notifications"
-          style={{ position: 'absolute', right: 0, top: 'calc(100% + 10px)', width: 'min(380px, calc(100vw - 32px))', maxHeight: '480px', display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '14px', boxShadow: 'var(--shadow)', overflow: 'hidden' }}
+          className="menu"
+          style={{ right: '-48px', width: 'min(380px, calc(100vw - 24px))', maxHeight: '480px', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1rem', borderBottom: '1px solid var(--border-color)' }}>
-            <strong style={{ fontSize: '0.95rem' }}>Notifications</strong>
+            <strong style={{ fontSize: '1rem', fontFamily: 'var(--font-heading)' }}>Notifications</strong>
             {items.some((n) => !n.isRead) && (
-              <button onClick={markAll} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+              <button onClick={markAll} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem', color: 'var(--primary-text)', fontWeight: 600 }}>
                 <CheckCheck size={14} /> Mark all read
               </button>
             )}
@@ -113,9 +105,10 @@ export const NotificationBell: React.FC = () => {
           {desktopAlerts === 'default' && (
             <button
               onClick={enableDesktopAlerts}
-              style={{ margin: '0.6rem 0.75rem 0', padding: '0.55rem 0.75rem', borderRadius: '8px', background: 'var(--surface-2)', border: '1px dashed var(--border-strong)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}
+              className="tip-box"
+              style={{ margin: '0.6rem 0.75rem 0', textAlign: 'left', fontSize: '0.8rem' }}
             >
-              🔔 Get desktop alerts for messages and offers, even when this tab is in the background
+              <Bell size={15} style={{ flexShrink: 0, marginTop: 2 }} /> Get desktop alerts for messages and offers, even when this tab is in the background
             </button>
           )}
 
@@ -133,15 +126,17 @@ export const NotificationBell: React.FC = () => {
                   <button
                     key={n.id}
                     onClick={() => openItem(n)}
-                    style={{ width: '100%', display: 'flex', gap: '0.7rem', alignItems: 'flex-start', textAlign: 'left', padding: '0.7rem 0.75rem', borderRadius: '10px', background: n.isRead ? 'transparent' : 'var(--surface-2)', color: 'var(--text-primary)' }}
+                    style={{ width: '100%', display: 'flex', gap: '0.7rem', alignItems: 'flex-start', textAlign: 'left', padding: '0.7rem 0.75rem', borderRadius: '10px', background: n.isRead ? 'transparent' : 'var(--primary-soft)', color: 'var(--text-primary)', marginBottom: '2px' }}
                   >
-                    <Icon size={18} color={color} style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span style={{ width: 34, height: 34, borderRadius: 999, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb, ${color} 13%, transparent)` }}>
+                      <Icon size={17} color={color} />
+                    </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: 'block', fontSize: '0.86rem', fontWeight: n.isRead ? 500 : 700 }}>{n.title}</span>
                       <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{n.body}</span>
                       <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>{timeAgo(n.createdAt)}</span>
                     </span>
-                    {!n.isRead && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', marginTop: '6px', flexShrink: 0 }} />}
+                    {!n.isRead && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', marginTop: '6px', flexShrink: 0 }} />}
                   </button>
                 );
               })

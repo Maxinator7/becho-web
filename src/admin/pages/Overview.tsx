@@ -1,29 +1,49 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { BadgeCheck, CalendarDays, Hourglass, Info, MessageSquare, Package, RefreshCw, ShoppingBag, TrendingUp, Users } from 'lucide-react';
 import { fetchApi } from '../../api/client';
 import type { Analytics } from '../types';
-import { Button, ErrorBanner, Loading, PageHeader, apiError, fmtDateTime, fmtNum, humanize, toneText } from '../ui';
+import { Card, ErrorBanner, Loading, PageHeader, apiError, fmtNum, humanize } from '../ui';
 import { ChartCard, HBarChart, LineChart, SERIES_COLORS } from '../charts';
 
 const PERIODS = [7, 30, 90] as const;
+const timeFmt = new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit' });
+const rangeFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
+const pctNum = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0);
 const pct = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : '—');
+const pct1 = (part: number, whole: number) => {
+  if (whole <= 0) return '—';
+  const v = (part / whole) * 100;
+  return `${v >= 10 || v === 0 ? Math.round(v) : v.toFixed(1)}%`;
+};
+const hours = (h: number | null) => (h == null ? '—' : `${h < 10 ? h.toFixed(1) : Math.round(h)} h`);
 
-const Kpi: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode; to?: string }> = ({ label, value, hint, to }) => {
+const Kpi: React.FC<{
+  label: string;
+  icon: React.ReactNode;
+  value: React.ReactNode;
+  delta?: React.ReactNode;
+  foot?: [React.ReactNode, React.ReactNode];
+  to?: string;
+}> = ({ label, icon, value, delta, foot, to }) => {
   const body = (
     <>
-      <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2, marginTop: '0.15rem' }}>{value}</div>
-      {hint && <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{hint}</div>}
+      <div className="a-kpi__top">
+        <span className="a-kpi__label">{label}</span>
+        <span className="a-kpi__icon" aria-hidden>{icon}</span>
+      </div>
+      <div className="a-kpi__value">{value}</div>
+      {delta && <div className="a-kpi__delta">{delta}</div>}
+      {foot && (
+        <div className="a-kpi__foot">
+          <span>{foot[0]}</span>
+          <strong>{foot[1]}</strong>
+        </div>
+      )}
     </>
   );
-  const style: React.CSSProperties = { padding: '0.95rem 1.05rem', minWidth: 0, display: 'block' };
-  return to ? (
-    <Link to={to} className="glass-panel adm-focus" style={style}>{body}</Link>
-  ) : (
-    <div className="glass-panel" style={style}>{body}</div>
-  );
+  return to ? <Link to={to} className="a-kpi">{body}</Link> : <div className="a-kpi">{body}</div>;
 };
 
 export const OverviewPage: React.FC = () => {
@@ -45,32 +65,6 @@ export const OverviewPage: React.FC = () => {
     load();
   }, [load]);
 
-  const periodSelector = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-      <div role="radiogroup" aria-label="Period" style={{ display: 'inline-flex', background: 'var(--surface-2)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '3px' }}>
-        {PERIODS.map((p) => (
-          <button
-            key={p}
-            role="radio"
-            aria-checked={days === p}
-            onClick={() => setDays(p)}
-            className="adm-btn"
-            style={{
-              padding: '0.35rem 0.8rem', fontSize: '0.82rem', fontWeight: 600, borderRadius: '6px',
-              background: days === p ? 'var(--bg-secondary)' : 'transparent',
-              color: days === p ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: days === p ? 'var(--shadow-card)' : 'none',
-              border: days === p ? '1px solid var(--border-strong)' : '1px solid transparent',
-            }}
-          >
-            {p} days
-          </button>
-        ))}
-      </div>
-      <Button small variant="ghost" icon={<RefreshCw size={14} />} onClick={load} aria-label="Refresh" title="Refresh" />
-    </div>
-  );
-
   const t = data?.totals;
   const s = data?.series ?? [];
   const daysAxis = s.map((d) => d.day);
@@ -78,42 +72,186 @@ export const OverviewPage: React.FC = () => {
   const f = data?.funnel;
   const mod = data?.moderation;
   const modActions = Object.entries(mod?.actions ?? {}).sort((a, b) => b[1] - a[1]);
+  const cityTotal = data?.byCity.reduce((a, c) => a + c.count, 0) ?? 0;
+  const catTotal = data?.byCategory.reduce((a, c) => a + c.count, 0) ?? 0;
+  const catMax = Math.max(0, ...(data?.byCategory.map((c) => c.count) ?? []));
+
+  const range = data && s.length ? `${rangeFmt.format(new Date(`${s[0].day}T00:00:00`))} – ${rangeFmt.format(new Date(`${s[s.length - 1].day}T00:00:00`))}` : null;
+
+  const actions = (
+    <div className="a-row" style={{ gap: 10 }}>
+      {range && (
+        <span className="a-chip" style={{ height: 38, padding: '0 12px', background: 'var(--a-surface)', border: '1px solid var(--a-border)', color: 'var(--a-text)', fontWeight: 500 }}>
+          <CalendarDays size={15} /> {range}
+        </span>
+      )}
+      <div role="radiogroup" aria-label="Period" className="a-seg">
+        {PERIODS.map((p) => (
+          <button key={p} role="radio" aria-checked={days === p} onClick={() => setDays(p)}>
+            {p} days
+          </button>
+        ))}
+      </div>
+      <button type="button" className="a-iconbtn" onClick={load} aria-label="Refresh" title="Refresh">
+        <RefreshCw size={16} className={loading ? 'a-spin' : undefined} />
+      </button>
+    </div>
+  );
+
+  // Header % = conversion from the previous step; bar = share of all published listings.
+  const steps = f
+    ? [
+        { label: 'Published', value: f.published, prev: f.published, note: 'Listings published in period' },
+        { label: 'Got an offer', value: f.withOffer, prev: f.published, note: `${pct1(f.withOffer, f.published)} of published` },
+        { label: 'Deal agreed', value: f.withDeal, prev: f.withOffer, note: `${pct1(f.withDeal, f.published)} of published` },
+        { label: 'Sold', value: f.sold, prev: f.withDeal, note: `${pct1(f.sold, f.published)} of published` },
+      ]
+    : [];
 
   return (
     <div>
       <PageHeader
-        title="Overview"
-        subtitle={data ? `Last ${data.periodDays} days · updated ${fmtDateTime(data.generatedAt)} · days in IST` : 'Marketplace health at a glance'}
-        actions={periodSelector}
+        overline="Marketplace operations"
+        meta={data ? `Updated ${timeFmt.format(new Date(data.generatedAt))} · days in IST` : undefined}
+        title="Trust & marketplace overview"
+        actions={actions}
       />
-      {error && <div style={{ marginBottom: '1rem' }}><ErrorBanner message={error} onRetry={load} /></div>}
+      {error && <div style={{ marginBottom: 16 }}><ErrorBanner message={error} onRetry={load} /></div>}
       {!data && loading && <Loading label="Loading analytics…" />}
       {data && t && f && mod && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.85rem' }}>
-            <Kpi label="Total users" value={fmtNum(t.users.total)} hint={`${fmtNum(t.users.active)} active`} to="/users" />
-            <Kpi label="New users" value={fmtNum(t.users.newInPeriod)} hint={`in ${data.periodDays} days`} />
-            <Kpi label="Signed in" value={fmtNum(t.users.signedInInPeriod)} hint={`in ${data.periodDays} days`} />
-            <Kpi label="Live listings" value={fmtNum(live)} hint={`${fmtNum(t.listings.newInPeriod)} new in period`} to="/listings?status=LIVE" />
-            <Kpi label="Verified live" value={fmtNum(t.listings.verifiedLive)} hint={live ? `${pct(t.listings.verifiedLive, live)} of live` : undefined} to="/listings?status=LIVE&verified=true" />
-            <Kpi label="Offers" value={fmtNum(t.offersInPeriod)} hint="made in period" />
-            <Kpi label="Deals" value={fmtNum(t.dealsInPeriod)} hint="offers accepted" />
-            <Kpi label="Sold" value={fmtNum(t.soldInPeriod)} hint="listings marked sold" />
-            <Kpi label="Messages" value={fmtNum(t.messagesInPeriod)} hint={`${fmtNum(t.conversationsInPeriod)} new chats`} />
+        <div className="a-stack" style={{ gap: 24, opacity: loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+          <div className="a-kpis">
             <Kpi
-              label="Review queue"
-              value={<span style={{ color: mod.queueSize > 0 ? toneText('warning') : undefined }}>{fmtNum(mod.queueSize)}</span>}
-              hint={mod.queueSize > 0 ? 'waiting for review' : 'all clear'}
-              to="/queue"
+              label="Live listings"
+              icon={<Package size={16} />}
+              value={fmtNum(live)}
+              to="/listings?status=LIVE"
+              delta={<><span className="a-chip a-chip--success"><TrendingUp size={12} /> +{fmtNum(t.listings.newInPeriod)}</span> new in {data.periodDays} days</>}
+              foot={['Verified live', `${fmtNum(t.listings.verifiedLive)} (${pct(t.listings.verifiedLive, live)})`]}
             />
             <Kpi
-              label="Avg time to approve"
-              value={mod.avgHoursToApprove == null ? '—' : `${mod.avgHoursToApprove < 10 ? mod.avgHoursToApprove.toFixed(1) : Math.round(mod.avgHoursToApprove)} h`}
-              hint={`${fmtNum(mod.reviewedInPeriod)} reviewed in period`}
+              label="Staff review queue"
+              icon={<Hourglass size={16} />}
+              value={<>{fmtNum(mod.queueSize)} <span style={{ fontSize: 14, fontWeight: 600, color: mod.queueSize > 0 ? 'var(--a-warning-text)' : 'var(--a-success-text)' }}>{mod.queueSize > 0 ? 'waiting' : 'all clear'}</span></>}
+              to="/queue"
+              delta={<><span className="a-chip a-chip--accent">Avg {hours(mod.avgHoursToApprove)}</span> to approve</>}
+              foot={['Reviewed in period', fmtNum(mod.reviewedInPeriod)]}
+            />
+            <Kpi
+              label="Registered users"
+              icon={<Users size={16} />}
+              value={fmtNum(t.users.total)}
+              to="/users"
+              delta={<><span className="a-chip a-chip--success"><TrendingUp size={12} /> +{fmtNum(t.users.newInPeriod)}</span> joined in period</>}
+              foot={['Signed in (period)', fmtNum(t.users.signedInInPeriod)]}
+            />
+            <Kpi
+              label="Offers made"
+              icon={<BadgeCheck size={16} />}
+              value={fmtNum(t.offersInPeriod)}
+              delta={<><span className="a-chip a-chip--accent">{fmtNum(t.dealsInPeriod)} deals</span> offers accepted</>}
+              foot={['Acceptance', pct(t.dealsInPeriod, t.offersInPeriod)]}
+            />
+            <Kpi
+              label="Sold"
+              icon={<ShoppingBag size={16} />}
+              value={fmtNum(t.soldInPeriod)}
+              delta={<><span className="a-chip"><MessageSquare size={12} /> {fmtNum(t.messagesInPeriod)}</span> messages sent</>}
+              foot={['New chats', fmtNum(t.conversationsInPeriod)]}
             />
           </div>
 
-          <div className="adm-grid-2">
+          {/* Funnel */}
+          <Card
+            title={<>Listing conversion funnel <span title="Of the listings published in this period, how many went on to each stage. Percentages are of the previous step." style={{ display: 'inline-flex', color: 'var(--a-muted)' }}><Info size={15} /></span></>}
+            subtitle={`Listings published in the last ${data.periodDays} days, followed through to sale`}
+            actions={
+              <div className="a-legend">
+                <span><span className="a-legend__sw" style={{ background: 'var(--a-primary)' }} />Bar: share of published · % vs previous step</span>
+                <span className="a-chip a-chip--accent">Overall sold: {pct1(f.sold, f.published)}</span>
+              </div>
+            }
+          >
+            <ol className="a-funnel" aria-label="Listing funnel">
+              {steps.map((st, i) => (
+                <li key={st.label} className={`a-step${i === steps.length - 1 ? ' a-step--final' : ''}`}>
+                  <div className="a-step__top">
+                    <span>STEP {String(i + 1).padStart(2, '0')}</span>
+                    <span title={i === 0 ? undefined : 'Conversion from the previous step'}>{pct1(st.value, st.prev)}</span>
+                  </div>
+                  <div className="a-step__bar" role="presentation"><span style={{ width: `${Math.min(100, pctNum(st.value, f.published))}%` }} /></div>
+                  <div className="a-step__label">{st.label}</div>
+                  <div className="a-step__value">{fmtNum(st.value)}</div>
+                  <div className="a-step__note">{st.note}</div>
+                </li>
+              ))}
+            </ol>
+          </Card>
+
+          {/* City + category */}
+          <div className="a-grid-city">
+            <ChartCard
+              title="Listings by metro city"
+              subtitle="Live listings right now, share of total"
+              table={{ columns: ['City', 'Live listings', 'Share'], rows: data.byCity.map((c) => [`${c.cityName} (${c.cityCode})`, c.count, pct1(c.count, cityTotal)]) }}
+            >
+              {data.byCity.length === 0 || cityTotal === 0 ? (
+                <div className="a-empty">No live listings yet.</div>
+              ) : (
+                <ul className="a-bars">
+                  {data.byCity.map((c, i) => (
+                    <li key={c.cityCode} className="a-bar" tabIndex={0} aria-label={`${c.cityName}: ${fmtNum(c.count)} live listings, ${pct1(c.count, cityTotal)}`}>
+                      <div className="a-bar__row">
+                        <span className="a-dot" style={{ width: 8, height: 8, color: i === 0 ? 'var(--a-primary)' : 'var(--a-ink)' }} />
+                        <span className="a-bar__name">{c.cityName}</span>
+                        <span className="a-bar__val">{fmtNum(c.count)}</span>
+                        <span className="a-bar__pct">({pct1(c.count, cityTotal)})</span>
+                      </div>
+                      <div className="a-bar__track"><div className="a-bar__fill" style={{ width: `${pctNum(c.count, cityTotal)}%`, background: i === 0 ? 'var(--a-primary)' : 'var(--a-ink)' }} /></div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              title="Category volume"
+              subtitle="Live listings by top-level category"
+              table={{ columns: ['Category', 'Live listings', 'Share'], rows: data.byCategory.map((c) => [c.name, c.count, pct1(c.count, catTotal)]) }}
+            >
+              {data.byCategory.length === 0 || catTotal === 0 ? (
+                <div className="a-empty">No live listings yet.</div>
+              ) : (
+                <div className="a-table-wrap">
+                  <table className="a-table a-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Category</th>
+                        <th className="a-th-num">Live listings</th>
+                        <th className="a-th-num">Share</th>
+                        <th style={{ width: '34%' }}><span className="a-sr">Relative volume</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.byCategory.map((c) => (
+                        <tr key={c.name}>
+                          <td style={{ fontWeight: 600 }}>{c.name}</td>
+                          <td className="a-td-num">{fmtNum(c.count)}</td>
+                          <td className="a-td-num a-text-2">{pct1(c.count, catTotal)}</td>
+                          <td aria-hidden>
+                            <div className="a-bar__track" style={{ height: 6 }}><div className="a-bar__fill" style={{ width: `${pctNum(c.count, catMax)}%` }} /></div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </ChartCard>
+          </div>
+
+          {/* Daily charts */}
+          <div className="a-grid-2">
             <ChartCard
               title="New users & new listings"
               subtitle="Per day"
@@ -145,62 +283,31 @@ export const OverviewPage: React.FC = () => {
             </ChartCard>
           </div>
 
-          <div className="adm-grid-2">
+          <div className="a-grid-2">
             <ChartCard title="Messages sent" subtitle="Per day" table={{ columns: ['Day', 'Messages'], rows: s.map((d) => [d.day, d.messages]) }}>
               <LineChart days={daysAxis} series={[{ key: 'm', label: 'Messages', color: SERIES_COLORS[0], values: s.map((d) => d.messages) }]} emptyText="No messages in this period" />
             </ChartCard>
             <ChartCard
-              title="Listing funnel"
-              subtitle={`Listings published in the last ${data.periodDays} days`}
-              table={{
-                columns: ['Stage', 'Listings', 'Of published', 'Of previous'],
-                rows: [
-                  ['Published', f.published, '100%', '—'],
-                  ['Got an offer', f.withOffer, pct(f.withOffer, f.published), pct(f.withOffer, f.published)],
-                  ['Deal agreed', f.withDeal, pct(f.withDeal, f.published), pct(f.withDeal, f.withOffer)],
-                  ['Sold', f.sold, pct(f.sold, f.published), pct(f.sold, f.withDeal)],
-                ],
-              }}
+              title="Moderation"
+              subtitle={`Staff actions in the last ${data.periodDays} days`}
+              table={{ columns: ['Action', 'Count'], rows: modActions.map(([k, v]) => [humanize(k), v]) }}
             >
-              <HBarChart
-                emptyText="No listings published in this period"
-                rows={[
-                  { label: 'Published', value: f.published },
-                  { label: 'Got an offer', value: f.withOffer, note: pct(f.withOffer, f.published) },
-                  { label: 'Deal agreed', value: f.withDeal, note: pct(f.withDeal, f.withOffer) },
-                  { label: 'Sold', value: f.sold, note: pct(f.sold, f.withDeal) },
-                ]}
-                valueSuffix={(r) => (r.note ? `${r.note} of previous` : undefined)}
-              />
-              {f.published > 0 && (
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
-                  Overall: {pct(f.sold, f.published)} of published listings sold.
-                </div>
-              )}
-            </ChartCard>
-          </div>
-
-          <div className="adm-grid-2">
-            <ChartCard title="Live listings by city" subtitle="Right now" table={{ columns: ['City', 'Live listings'], rows: data.byCity.map((c) => [`${c.cityName} (${c.cityCode})`, c.count]) }}>
-              <HBarChart rows={data.byCity.map((c) => ({ label: c.cityName, value: c.count }))} emptyText="No live listings" />
-            </ChartCard>
-            <ChartCard title="Live listings by category" subtitle="Top-level categories, right now" table={{ columns: ['Category', 'Live listings'], rows: data.byCategory.map((c) => [c.name, c.count]) }}>
-              <HBarChart rows={data.byCategory.map((c) => ({ label: c.name, value: c.count }))} emptyText="No live listings" />
-            </ChartCard>
-          </div>
-
-          <div className="adm-grid-2">
-            <ChartCard title="Moderation actions" subtitle={`Staff actions in the last ${data.periodDays} days`} table={{ columns: ['Action', 'Count'], rows: modActions.map(([k, v]) => [humanize(k), v]) }}>
+              <div className="a-row" style={{ gap: 10, marginBottom: 16, flexWrap: 'nowrap' }}>
+                <div className="a-mini" style={{ flex: 1 }}><div className="a-mini__label">In queue</div><div className="a-mini__value">{fmtNum(mod.queueSize)}</div></div>
+                <div className="a-mini" style={{ flex: 1 }}><div className="a-mini__label">Reviewed</div><div className="a-mini__value">{fmtNum(mod.reviewedInPeriod)}</div></div>
+                <div className="a-mini" style={{ flex: 1 }}><div className="a-mini__label">Avg to approve</div><div className="a-mini__value">{hours(mod.avgHoursToApprove)}</div></div>
+              </div>
               <HBarChart rows={modActions.map(([k, v]) => ({ label: humanize(k), value: v }))} emptyText="No moderation actions in this period" />
             </ChartCard>
-            <ChartCard
-              title="Users by status"
-              subtitle="All accounts"
-              table={{ columns: ['Status', 'Users'], rows: Object.entries(t.users.byStatus).map(([k, v]) => [humanize(k), v]) }}
-            >
-              <HBarChart rows={Object.entries(t.users.byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: humanize(k), value: v }))} emptyText="No users yet" />
-            </ChartCard>
           </div>
+
+          <ChartCard
+            title="Users by status"
+            subtitle="All accounts"
+            table={{ columns: ['Status', 'Users'], rows: Object.entries(t.users.byStatus).map(([k, v]) => [humanize(k), v]) }}
+          >
+            <HBarChart rows={Object.entries(t.users.byStatus).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: humanize(k), value: v }))} emptyText="No users yet" />
+          </ChartCard>
         </div>
       )}
     </div>

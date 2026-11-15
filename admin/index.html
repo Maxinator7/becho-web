@@ -8,6 +8,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <script>
       // Apply the saved theme before first paint (see src/context/ThemeContext.tsx).
+      // Admin colours/fonts live in src/admin/admin.css (scoped to .admin-root).
       try {
         var theme = localStorage.getItem('becho.theme');
         if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
@@ -15,7 +16,7 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>

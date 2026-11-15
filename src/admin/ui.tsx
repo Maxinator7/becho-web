@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { AlertCircle, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Loader2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, Loader2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { ApiResponse } from '../api/client';
 import type { Pagination as PaginationT } from './types';
 
@@ -8,10 +9,12 @@ import type { Pagination as PaginationT } from './types';
 /* ------------------------------------------------------------------ */
 
 const dateFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+const monthYearFmt = new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' });
 const dateTimeFmt = new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 const numFmt = new Intl.NumberFormat('en-IN');
 
 export const fmtDate = (iso?: string | null) => (iso ? dateFmt.format(new Date(iso)) : '—');
+export const fmtMonthYear = (iso?: string | null) => (iso ? monthYearFmt.format(new Date(iso)) : '—');
 export const fmtDateTime = (iso?: string | null) => (iso ? dateTimeFmt.format(new Date(iso)) : '—');
 export const fmtNum = (n?: number | null) => (n == null ? '—' : numFmt.format(n));
 
@@ -28,6 +31,17 @@ export function timeAgo(iso?: string | null): string {
   return fmtDate(iso);
 }
 
+/** Compact age without "ago": "12m", "5h", "3d". */
+export function ageShort(iso?: string | null): string {
+  if (!iso) return '—';
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
 /** "+919876543210" → "+91 98765 43210". */
 export function fmtPhone(p?: string | null): string {
   if (!p) return '—';
@@ -36,6 +50,14 @@ export function fmtPhone(p?: string | null): string {
 }
 
 export const humanize = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, ' ');
+
+export const initials = (name?: string | null) =>
+  (name ?? '?')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('') || '?';
 
 /** Builds a query string from defined, non-empty values. */
 export function qs(params: Record<string, string | number | undefined | null>): string {
@@ -65,6 +87,9 @@ export function apiError(res: ApiResponse<unknown>, fallback = 'Something went w
   return detail || res.error?.message || fallback;
 }
 
+/** Tells the shell to refresh the review-queue badge after a moderation action. */
+export const notifyQueueChanged = () => window.dispatchEvent(new Event('adm:queue-changed'));
+
 /* ------------------------------------------------------------------ */
 /* Hooks                                                               */
 /* ------------------------------------------------------------------ */
@@ -79,61 +104,26 @@ export function useDebounced<T>(value: T, ms = 300): T {
 }
 
 /* ------------------------------------------------------------------ */
-/* Styles                                                              */
-/* ------------------------------------------------------------------ */
-
-export const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '0.6rem 0.75rem',
-  borderRadius: '8px',
-  background: 'var(--input-bg)',
-  border: '1px solid var(--input-border)',
-  color: 'var(--input-text)',
-  fontSize: '0.9rem',
-};
-
-export const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  width: 'auto',
-  background: 'var(--select-bg)',
-  paddingRight: '0.5rem',
-  cursor: 'pointer',
-};
-
-export const labelStyle: React.CSSProperties = { display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem' };
-
-export const mutedText: React.CSSProperties = { color: 'var(--text-secondary)', fontSize: '0.85rem' };
-
-/* ------------------------------------------------------------------ */
-/* Pills & badges                                                      */
+/* Chips                                                               */
 /* ------------------------------------------------------------------ */
 
 export type Tone = 'success' | 'warning' | 'danger' | 'accent' | 'info' | 'neutral';
 
-const TONE_VAR: Record<Tone, string> = {
-  success: 'var(--success)',
-  warning: 'var(--warning)',
-  danger: 'var(--danger)',
-  accent: 'var(--accent-primary)',
-  info: 'var(--accent-secondary)',
-  neutral: 'var(--text-muted)',
-};
-
-/** Text tinted toward the theme's primary ink so it stays readable on the soft fill in both themes. */
+/** Readable text colour for a tone (used for icons/inline text outside chips). */
 export const toneText = (tone: Tone) =>
-  tone === 'neutral' ? 'var(--text-secondary)' : `color-mix(in srgb, ${TONE_VAR[tone]} 78%, var(--text-primary))`;
+  ({
+    success: 'var(--a-success-text)',
+    warning: 'var(--a-warning-text)',
+    danger: 'var(--a-danger-text)',
+    accent: 'var(--a-primary-text)',
+    info: 'var(--a-info-text)',
+    neutral: 'var(--a-text-2)',
+  })[tone];
 
-export const Pill: React.FC<{ tone: Tone; children: React.ReactNode; icon?: React.ReactNode; title?: string }> = ({ tone, children, icon, title }) => (
-  <span
-    title={title}
-    style={{
-      display: 'inline-flex', alignItems: 'center', gap: '0.3rem', padding: '0.15rem 0.6rem', borderRadius: '999px',
-      fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1.5,
-      background: `color-mix(in srgb, ${TONE_VAR[tone]} 14%, transparent)`,
-      border: `1px solid color-mix(in srgb, ${TONE_VAR[tone]} 30%, transparent)`,
-      color: toneText(tone),
-    }}
-  >
+export const Pill: React.FC<{ tone: Tone; children: React.ReactNode; icon?: React.ReactNode; title?: string; round?: boolean; className?: string }> = ({
+  tone, children, icon, title, round, className = '',
+}) => (
+  <span title={title} className={`a-chip a-chip--${tone}${round ? ' a-chip--pill' : ''} ${className}`}>
     {icon}
     {children}
   </span>
@@ -164,55 +154,53 @@ export const LISTING_STATUS: Record<string, [string, Tone]> = {
 
 export const UserStatusPill: React.FC<{ status: string }> = ({ status }) => {
   const [label, tone] = USER_STATUS[status] ?? [humanize(status), 'neutral' as Tone];
-  return <Pill tone={tone}>{label}</Pill>;
+  return <Pill tone={tone} round icon={<span className="a-dot" />}>{label}</Pill>;
 };
 
 export const ListingStatusPill: React.FC<{ status: string }> = ({ status }) => {
   const [label, tone] = LISTING_STATUS[status] ?? [humanize(status), 'neutral' as Tone];
-  return <Pill tone={tone}>{label}</Pill>;
+  return <Pill tone={tone} round icon={<span className="a-dot" />}>{label}</Pill>;
 };
 
 export const VerifiedBadge: React.FC<{ small?: boolean }> = ({ small }) => (
-  <Pill tone="info" icon={<CheckCircle2 size={small ? 11 : 13} />} title="Verified by Becho staff">Verified</Pill>
+  <Pill tone="success" icon={<CheckCircle2 size={small ? 11 : 13} />} title="Verified by Becho staff">Verified</Pill>
+);
+
+/** "✓ Verified" / "Not verified" inline status for an email or mobile. */
+export const CheckMark: React.FC<{ ok: boolean; okLabel?: string; noLabel?: string; title?: string }> = ({ ok, okLabel = 'Verified', noLabel = 'Not verified', title }) => (
+  <span className={`a-check ${ok ? 'a-check--ok' : 'a-check--no'}`} title={title}>
+    {ok ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />} {ok ? okLabel : noLabel}
+  </span>
 );
 
 /* ------------------------------------------------------------------ */
 /* Buttons                                                             */
 /* ------------------------------------------------------------------ */
 
-type BtnVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'ghost';
+type BtnVariant = 'primary' | 'ink' | 'secondary' | 'soft' | 'danger' | 'danger-solid' | 'success' | 'ghost';
 
-export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; icon?: React.ReactNode; small?: boolean; loading?: boolean }> = ({
-  variant = 'secondary', icon, small, loading, children, style, disabled, ...rest
-}) => {
-  const base: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
-    padding: small ? '0.35rem 0.7rem' : '0.55rem 1rem', fontSize: small ? '0.8rem' : '0.875rem',
-    fontWeight: 600, borderRadius: '8px', whiteSpace: 'nowrap', border: '1px solid transparent',
-    transition: 'filter 0.15s ease',
-  };
-  const variants: Record<BtnVariant, React.CSSProperties> = {
-    primary: { background: 'var(--accent-primary)', color: 'var(--text-on-accent)' },
-    secondary: { background: 'var(--surface-2)', color: 'var(--text-primary)', borderColor: 'var(--border-strong)' },
-    danger: { background: 'color-mix(in srgb, var(--danger) 12%, transparent)', color: toneText('danger'), borderColor: 'color-mix(in srgb, var(--danger) 40%, transparent)' },
-    success: { background: 'color-mix(in srgb, var(--success) 12%, transparent)', color: toneText('success'), borderColor: 'color-mix(in srgb, var(--success) 40%, transparent)' },
-    ghost: { background: 'transparent', color: 'var(--text-secondary)' },
-  };
-  return (
-    <button className="adm-btn" disabled={disabled || loading} style={{ ...base, ...variants[variant], ...style }} {...rest}>
-      {loading ? <Loader2 size={small ? 13 : 15} style={{ animation: 'becho-spin 1s linear infinite' }} /> : icon}
-      {children}
-    </button>
-  );
-};
+export const Button: React.FC<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: BtnVariant; icon?: React.ReactNode; small?: boolean; large?: boolean; block?: boolean; loading?: boolean }
+> = ({ variant = 'secondary', icon, small, large, block, loading, children, className = '', disabled, type = 'button', ...rest }) => (
+  <button
+    type={type}
+    className={`a-btn a-btn--${variant}${small ? ' a-btn--sm' : ''}${large ? ' a-btn--lg' : ''}${block ? ' a-btn--block' : ''} ${className}`}
+    disabled={disabled || loading}
+    {...rest}
+  >
+    {loading ? <Loader2 size={small ? 13 : 15} className="a-spin" /> : icon}
+    {children}
+  </button>
+);
 
 export const CopyButton: React.FC<{ value: string; label?: string }> = ({ value, label = 'Copy' }) => {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
+  const copy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       await navigator.clipboard.writeText(value);
     } catch {
-      /* clipboard unavailable (http / permissions) — fall through to show state anyway */
+      /* clipboard unavailable (http / permissions) — still show state */
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -221,12 +209,11 @@ export const CopyButton: React.FC<{ value: string; label?: string }> = ({ value,
     <button
       type="button"
       onClick={copy}
-      className="adm-btn"
       aria-label={`${label} ${value}`}
       title={copied ? 'Copied' : `${label} ${value}`}
-      style={{ display: 'inline-flex', alignItems: 'center', padding: '0.25rem', borderRadius: '6px', color: copied ? toneText('success') : 'var(--text-muted)' }}
+      style={{ display: 'inline-flex', alignItems: 'center', padding: 3, borderRadius: 5, color: copied ? 'var(--a-success-text)' : 'var(--a-muted)' }}
     >
-      {copied ? <Check size={14} /> : <Copy size={14} />}
+      {copied ? <Check size={13} /> : <Copy size={13} />}
     </button>
   );
 };
@@ -235,11 +222,24 @@ export const CopyButton: React.FC<{ value: string; label?: string }> = ({ value,
 /* Containers & states                                                 */
 /* ------------------------------------------------------------------ */
 
-export const Card: React.FC<{ title?: React.ReactNode; actions?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; padding?: string }> = ({ title, actions, children, style, padding = '1.25rem' }) => (
-  <section className="glass-panel" style={{ padding, ...style }}>
+export const Card: React.FC<{
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  flush?: boolean;
+  small?: boolean;
+  id?: string;
+}> = ({ title, subtitle, actions, children, className = '', style, flush, small, id }) => (
+  <section id={id} className={`a-card${flush ? ' a-card--flush' : ''} ${className}`} style={style}>
     {(title || actions) && (
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        {title && <h2 style={{ fontSize: '1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{title}</h2>}
+      <div className="a-card__head" style={flush ? { padding: '20px 20px 0' } : undefined}>
+        <div style={{ minWidth: 0 }}>
+          {title && <h2 className={`a-card__title${small ? ' a-card__title--sm' : ''}`}>{title}</h2>}
+          {subtitle && <div className="a-card__sub">{subtitle}</div>}
+        </div>
         {actions}
       </div>
     )}
@@ -247,56 +247,83 @@ export const Card: React.FC<{ title?: React.ReactNode; actions?: React.ReactNode
   </section>
 );
 
-export const PageHeader: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode; actions?: React.ReactNode; back?: React.ReactNode }> = ({ title, subtitle, actions, back }) => (
-  <header style={{ marginBottom: '1.5rem' }}>
-    {back}
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '1rem', flexWrap: 'wrap' }}>
-      <div>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.25 }}>{title}</h1>
-        {subtitle && <div style={{ ...mutedText, marginTop: '0.25rem' }}>{subtitle}</div>}
+export const PageHeader: React.FC<{
+  overline?: React.ReactNode;
+  meta?: React.ReactNode;
+  title: React.ReactNode;
+  titleExtra?: React.ReactNode;
+  subtitle?: React.ReactNode;
+  actions?: React.ReactNode;
+}> = ({ overline, meta, title, titleExtra, subtitle, actions }) => (
+  <header className="a-pagehead">
+    <div style={{ minWidth: 0 }}>
+      {overline && (
+        <div className="a-overline">
+          <span className="a-overline__dot" aria-hidden /> {overline}
+          {meta && <span className="a-overline__meta">· {meta}</span>}
+        </div>
+      )}
+      <div className="a-h1-row">
+        <h1 className="a-h1">{title}</h1>
+        {titleExtra}
       </div>
-      {actions}
+      {subtitle && <div className="a-pagehead__sub">{subtitle}</div>}
     </div>
+    {actions}
   </header>
 );
 
+export const BackLink: React.FC<{ to: string; label: string }> = ({ to, label }) => (
+  <Link to={to} className="a-back">
+    <ArrowLeft size={15} /> {label}
+  </Link>
+);
+
 export const ErrorBanner: React.FC<{ message: string; onRetry?: () => void }> = ({ message, onRetry }) => (
-  <div role="alert" style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', color: toneText('danger'), background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 30%, transparent)', padding: '0.7rem 0.9rem', borderRadius: '8px', fontSize: '0.875rem' }}>
-    <AlertCircle size={17} style={{ flexShrink: 0 }} />
+  <div role="alert" className="a-banner a-banner--danger" style={{ alignItems: 'center' }}>
+    <AlertCircle size={17} />
     <span style={{ flex: 1 }}>{message}</span>
     {onRetry && <Button small onClick={onRetry}>Retry</Button>}
   </div>
 );
 
 export const Loading: React.FC<{ label?: string }> = ({ label = 'Loading…' }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '3rem 1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-    <Loader2 size={18} style={{ animation: 'becho-spin 1s linear infinite' }} /> {label}
+  <div className="a-loading" role="status">
+    <Loader2 size={18} className="a-spin" /> {label}
   </div>
 );
 
 export const EmptyState: React.FC<{ icon?: React.ReactNode; title: string; children?: React.ReactNode }> = ({ icon, title, children }) => (
-  <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-secondary)' }}>
-    {icon && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>{icon}</div>}
-    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>{title}</div>
-    {children && <div style={{ fontSize: '0.85rem' }}>{children}</div>}
+  <div className="a-empty">
+    {icon && <div className="a-empty__icon">{icon}</div>}
+    <div className="a-empty__title">{title}</div>
+    {children && <div style={{ fontSize: 13 }}>{children}</div>}
   </div>
 );
 
+/** Table footer: "Showing 1–25 of 140 users" + pager. */
 export const Pagination: React.FC<{ pagination: PaginationT | null; onPage: (p: number) => void; noun: string }> = ({ pagination, onPage, noun }) => {
   if (!pagination) return null;
   const { page, totalPages, total, limit } = pagination;
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
+  const pages = Math.max(totalPages, 1);
+  const nums = Array.from(new Set([1, page - 1, page, page + 1, pages])).filter((p) => p >= 1 && p <= pages).sort((a, b) => a - b);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '0.85rem 0.25rem 0', flexWrap: 'wrap' }}>
-      <span style={mutedText}>
-        {total === 0 ? `No ${noun}` : `${fmtNum(from)}–${fmtNum(to)} of ${fmtNum(total)} ${noun}`}
-      </span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Button small icon={<ChevronLeft size={14} />} disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">Prev</Button>
-        <span style={{ ...mutedText, minWidth: '5.5rem', textAlign: 'center' }}>Page {page} of {Math.max(totalPages, 1)}</span>
-        <Button small disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="Next page">Next <ChevronRight size={14} /></Button>
-      </div>
+    <div className="a-table-foot">
+      <span>{total === 0 ? `No ${noun}` : <>Showing <strong style={{ color: 'var(--a-text)' }}>{fmtNum(from)}–{fmtNum(to)}</strong> of {fmtNum(total)} {noun}</>}</span>
+      {pages > 1 && (
+        <nav className="a-pager" aria-label="Pagination">
+          <button disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page"><ChevronLeft size={15} /></button>
+          {nums.map((p, i) => (
+            <React.Fragment key={p}>
+              {i > 0 && p - nums[i - 1] > 1 && <span className="a-muted" aria-hidden>…</span>}
+              {p === page ? <span className="a-pager__cur" aria-current="page">{p}</span> : <button onClick={() => onPage(p)} aria-label={`Page ${p}`}>{p}</button>}
+            </React.Fragment>
+          ))}
+          <button disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Next page"><ChevronRight size={15} /></button>
+        </nav>
+      )}
     </div>
   );
 };
@@ -315,25 +342,16 @@ export const Modal: React.FC<{ title: string; onClose: () => void; children: Rea
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-      style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
-    >
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={{ width: '100%', maxWidth: width, background: 'var(--bg-secondary)', border: '1px solid var(--border-strong)', borderRadius: '14px', boxShadow: 'var(--shadow)', maxHeight: '90vh', overflowY: 'auto' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)' }}>
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{title}</h2>
-          <button data-close onClick={onClose} aria-label="Close" className="adm-btn" style={{ color: 'var(--text-secondary)', display: 'flex', padding: '0.25rem' }}>
-            <X size={18} />
+    <div className="a-modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="a-modal" style={{ maxWidth: width }}>
+        <div className="a-modal__head">
+          <h2 className="a-modal__title">{title}</h2>
+          <button data-close onClick={onClose} aria-label="Close" className="a-iconbtn" style={{ width: 30, height: 30 }}>
+            <X size={17} />
           </button>
         </div>
-        <div style={{ padding: '1.25rem' }}>{children}</div>
-        {footer && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', padding: '0 1.25rem 1.25rem' }}>{footer}</div>}
+        <div className="a-modal__body">{children}</div>
+        {footer && <div className="a-modal__foot">{footer}</div>}
       </div>
     </div>
   );
@@ -350,10 +368,11 @@ export const ReasonDialog: React.FC<{
   placeholder?: string;
   extra?: (state: { checked: boolean; setChecked: (v: boolean) => void }) => React.ReactNode;
   defaultChecked?: boolean;
+  initialText?: string;
   onConfirm: (text: string, checked: boolean) => Promise<string | null>; // returns error message or null
   onClose: () => void;
-}> = ({ title, description, label, confirmLabel, variant = 'primary', minLength = 5, placeholder, extra, defaultChecked = true, onConfirm, onClose }) => {
-  const [text, setText] = useState('');
+}> = ({ title, description, label, confirmLabel, variant = 'primary', minLength = 5, placeholder, extra, defaultChecked = true, initialText = '', onConfirm, onClose }) => {
+  const [text, setText] = useState(initialText);
   const [checked, setChecked] = useState(defaultChecked);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -383,12 +402,13 @@ export const ReasonDialog: React.FC<{
         </>
       }
     >
-      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
-        {description && <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{description}</div>}
+      <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {description && <div style={{ fontSize: 13.5, color: 'var(--a-text-2)' }}>{description}</div>}
         {error && <ErrorBanner message={error} />}
         <div>
-          <label style={labelStyle} htmlFor="reason-text">
-            {label}{minLength > 0 ? ' *' : ' (optional)'}
+          <label className="a-label" htmlFor="reason-text">
+            {label}
+            {minLength > 0 ? <span className="a-label__req"> *</span> : <span className="a-muted" style={{ fontWeight: 500 }}> (optional)</span>}
           </label>
           <textarea
             id="reason-text"
@@ -398,11 +418,11 @@ export const ReasonDialog: React.FC<{
             onChange={(e) => setText(e.target.value)}
             onBlur={() => setTouched(true)}
             aria-invalid={touched && invalid}
-            style={{ ...inputStyle, resize: 'vertical', borderColor: touched && invalid ? 'var(--danger)' : undefined }}
+            className="a-textarea"
           />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-            <span style={{ color: toneText('danger') }}>{touched && invalid ? `Please enter at least ${minLength} characters.` : ''}</span>
-            <span style={{ color: 'var(--text-muted)' }}>{trimmed.length} chars</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 4 }}>
+            <span style={{ color: 'var(--a-danger-text)' }}>{touched && invalid ? `Please enter at least ${minLength} characters.` : ''}</span>
+            <span className="a-muted">{trimmed.length} chars</span>
           </div>
         </div>
         {extra?.({ checked, setChecked })}
@@ -428,20 +448,12 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={push}>
       {children}
-      <div aria-live="polite" style={{ position: 'fixed', bottom: '1.25rem', right: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', zIndex: 200, maxWidth: 'min(420px, calc(100vw - 2.5rem))' }}>
+      <div aria-live="polite" className="a-toasts">
         {toasts.map((t) => (
-          <div
-            key={t.id}
-            role={t.tone === 'danger' ? 'alert' : 'status'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.75rem 1rem', borderRadius: '10px',
-              background: 'var(--bg-secondary)', border: `1px solid color-mix(in srgb, ${TONE_VAR[t.tone]} 45%, var(--border-strong))`,
-              boxShadow: 'var(--shadow)', fontSize: '0.875rem', animation: 'adm-toast-in 0.18s ease-out',
-            }}
-          >
-            {t.tone === 'success' ? <CheckCircle2 size={18} color={TONE_VAR.success} /> : <AlertCircle size={18} color={TONE_VAR.danger} />}
+          <div key={t.id} role={t.tone === 'danger' ? 'alert' : 'status'} className={`a-toast a-toast--${t.tone}`}>
+            {t.tone === 'success' ? <CheckCircle2 size={18} color="var(--a-success)" /> : <AlertCircle size={18} color="var(--a-danger)" />}
             <span style={{ flex: 1 }}>{t.text}</span>
-            <button className="adm-btn" aria-label="Dismiss" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))} style={{ color: 'var(--text-muted)', display: 'flex' }}>
+            <button aria-label="Dismiss" onClick={() => setToasts((all) => all.filter((x) => x.id !== t.id))} style={{ color: 'var(--a-muted)', display: 'flex' }}>
               <X size={14} />
             </button>
           </div>
@@ -459,32 +471,26 @@ export const useToast = () => useContext(ToastContext);
 
 export const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
   <div style={{ minWidth: 0 }}>
-    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
-    <div style={{ fontSize: '0.9rem', marginTop: '0.15rem', overflowWrap: 'anywhere' }}>{children}</div>
+    <div className="a-kv__label">{label}</div>
+    <div className="a-kv__value">{children}</div>
   </div>
 );
 
-export const StatCard: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode; icon?: React.ReactNode }> = ({ label, value, hint, icon }) => (
-  <div className="glass-panel" style={{ padding: '1rem 1.1rem', display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-      {icon}
-      {label}
-    </div>
-    <div style={{ fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2 }}>{value}</div>
-    {hint && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{hint}</div>}
+export const Mini: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode }> = ({ label, value, hint }) => (
+  <div className="a-mini">
+    <div className="a-mini__label">{label}</div>
+    <div className="a-mini__value">{value}</div>
+    {hint && <div className="a-mini__hint">{hint}</div>}
   </div>
 );
 
-export const Thumb: React.FC<{ url?: string; mediaType?: string; size?: number; alt?: string }> = ({ url, mediaType, size = 44, alt = '' }) => (
-  <div style={{ width: size, height: size, borderRadius: '8px', overflow: 'hidden', background: 'var(--surface-3)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+export const Thumb: React.FC<{ url?: string; mediaType?: string; size?: number; alt?: string; tag?: React.ReactNode }> = ({ url, mediaType, size = 44, alt = '', tag }) => (
+  <div className="a-thumb" style={{ width: size, height: size }}>
     {url ? (
-      mediaType === 'VIDEO' ? (
-        <video src={url} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      ) : (
-        <img src={url} alt={alt} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      )
+      mediaType === 'VIDEO' ? <video src={url} muted preload="metadata" /> : <img src={url} alt={alt} loading="lazy" />
     ) : (
       'No photo'
     )}
+    {tag && <span className="a-thumb__tag">{tag}</span>}
   </div>
 );

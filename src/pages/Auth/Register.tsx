@@ -110,7 +110,8 @@ export const Register: React.FC = () => {
   return (
     <AuthCard
       maxWidth={460}
-      title={<>Join <span className="gradient-text">BECHO</span></>}
+      overline="Create account"
+      title="Join Becho"
       subtitle="Buy and sell near you. It takes a minute."
       footer={<>Already registered? <Link to="/login" style={linkStyle}>Sign in</Link></>}
     >
@@ -161,7 +162,7 @@ export const Register: React.FC = () => {
 
         <button
           type="submit" disabled={loading} aria-busy={loading} className="btn-primary"
-          style={{ width: '100%', padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', opacity: loading ? 0.7 : 1 }}
+          style={{ width: '100%', minHeight: '48px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1 }}
         >
           <UserPlus size={18} />
           {loading ? 'Creating account…' : 'Create account'}

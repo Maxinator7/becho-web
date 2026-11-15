@@ -80,7 +80,9 @@ export const VerifyAccount: React.FC = () => {
 
   return (
     <AuthCard
-      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}><ShieldCheck size={24} color="var(--accent-primary)" /> Verify your account</span>}
+      icon={<ShieldCheck size={24} />}
+      overline="One last step"
+      title="Verify your account"
       subtitle={<>We emailed a 6-digit code to <strong style={{ color: 'var(--text-primary)' }}>{destination}</strong>. It expires in 15 minutes.</>}
     >
       <DevOtpNotice code={info?.devOtp} />
@@ -92,7 +94,7 @@ export const VerifyAccount: React.FC = () => {
           id="verify-code" label="Verification code" value={code} autoFocus error={codeError}
           onChange={(c) => { setCode(c); if (codeError) setCodeError(undefined); }}
         />
-        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', padding: '0.75rem', opacity: loading ? 0.7 : 1 }}>
+        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
           {loading ? 'Verifying…' : 'Verify'}
         </button>
       </form>
@@ -102,7 +104,7 @@ export const VerifyAccount: React.FC = () => {
         {cooldown.left > 0 ? (
           <span aria-live="polite">send a new code in {cooldown.left}s</span>
         ) : (
-          <button type="button" onClick={handleResend} disabled={sending} style={{ color: 'var(--accent-primary)', fontWeight: 600, padding: 0 }}>
+          <button type="button" onClick={handleResend} disabled={sending} style={{ color: 'var(--primary-text)', fontWeight: 600, padding: 0 }}>
             {sending ? 'sending…' : 'send a new code'}
           </button>
         )}

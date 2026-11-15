@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, MapPin, X } from 'lucide-react';
 import { fetchApi } from '../../api/client';
 import type { ServiceArea } from '../types';
-import { Card, ErrorBanner, Loading, PageHeader, Pill, apiError } from '../ui';
+import { Card, EmptyState, ErrorBanner, Loading, PageHeader, Pill, apiError } from '../ui';
 
 const OnOff: React.FC<{ on: boolean; onLabel?: string; offLabel?: string }> = ({ on, onLabel = 'Enabled', offLabel = 'Disabled' }) => (
   <Pill tone={on ? 'success' : 'danger'} icon={on ? <Check size={12} /> : <X size={12} />}>{on ? onLabel : offLabel}</Pill>
@@ -21,20 +21,29 @@ export const ServiceAreasPage: React.FC = () => {
   };
   useEffect(load, []);
 
+  const active = areas?.filter((a) => a.isActive).length ?? 0;
+
   return (
     <div>
-      <PageHeader title="Service areas" subtitle={areas ? `${areas.length} cities configured` : 'Cities where Becho is open for buying and selling'} />
-      {error && <div style={{ marginBottom: '1rem' }}><ErrorBanner message={error} onRetry={load} /></div>}
-      <Card padding="0.5rem 0.75rem 0.75rem">
+      <PageHeader
+        overline="Configuration"
+        title="Service areas"
+        titleExtra={areas && <span className="a-chip a-chip--pill" style={{ marginTop: 8, background: 'var(--a-surface-3)' }}>{active} of {areas.length} active</span>}
+        subtitle="Cities where Becho is open for buying and selling. Read-only here."
+      />
+      {error && <div style={{ marginBottom: 16 }}><ErrorBanner message={error} onRetry={load} /></div>}
+      <Card flush>
         {!areas && !error ? (
           <Loading />
+        ) : areas && areas.length === 0 ? (
+          <EmptyState icon={<MapPin size={28} />} title="No service areas configured" />
         ) : (
-          <div className="adm-table-wrap">
-            <table className="adm-table">
+          <div className="a-table-wrap">
+            <table className="a-table">
               <thead>
                 <tr>
                   <th>City</th>
-                  <th>State / Country</th>
+                  <th>State / country</th>
                   <th>Status</th>
                   <th>Buying</th>
                   <th>Selling</th>
@@ -43,9 +52,17 @@ export const ServiceAreasPage: React.FC = () => {
               <tbody>
                 {areas?.map((a) => (
                   <tr key={a.id}>
-                    <td style={{ fontWeight: 600 }}>{a.cityName} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({a.cityCode})</span></td>
-                    <td style={{ color: 'var(--text-secondary)' }}>{a.stateName}, {a.countryCode}</td>
-                    <td><OnOff on={a.isActive} onLabel="Active" /></td>
+                    <td>
+                      <div className="a-row" style={{ gap: 10, flexWrap: 'nowrap' }}>
+                        <span className="a-kpi__icon" aria-hidden><MapPin size={15} /></span>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{a.cityName}</div>
+                          <div className="a-small a-mono a-text-2">{a.cityCode}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="a-text-2">{a.stateName}, {a.countryCode}</td>
+                    <td><OnOff on={a.isActive} onLabel="Active" offLabel="Inactive" /></td>
                     <td><OnOff on={a.buyingEnabled} /></td>
                     <td><OnOff on={a.sellingEnabled} /></td>
                   </tr>

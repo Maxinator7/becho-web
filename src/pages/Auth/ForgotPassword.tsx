@@ -139,12 +139,12 @@ export const ForgotPassword: React.FC = () => {
 
   if (step === 'done') {
     return (
-      <AuthCard title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle2 size={26} color="var(--success)" /> Password updated</span>}>
+      <AuthCard icon={<CheckCircle2 size={24} color="var(--success)" />} title="Password updated">
         <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
           You can now sign in with your new password. For your security, you’ve been signed out on all devices.
         </p>
         <button
-          type="button" className="btn-primary" style={{ width: '100%', padding: '0.75rem' }}
+          type="button" className="btn-primary" style={{ width: '100%', minHeight: '48px' }}
           onClick={() => navigate('/login', { replace: true, state: { identifier, notice: 'Password updated. Sign in with your new password.' } })}
         >
           Sign in
@@ -155,7 +155,9 @@ export const ForgotPassword: React.FC = () => {
 
   return (
     <AuthCard
-      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}><KeyRound size={24} color="var(--accent-primary)" /> Reset your password</span>}
+      icon={<KeyRound size={24} />}
+      overline={step === 'request' ? 'Step 1 of 2' : 'Step 2 of 2'}
+      title="Reset your password"
       subtitle={step === 'request'
         ? 'Enter the email, mobile number or user code on your account. We’ll email you a code to set a new password.'
         : undefined}
@@ -174,7 +176,7 @@ export const ForgotPassword: React.FC = () => {
             placeholder="you@example.com, 98765 43210 or BCH-XXXXXX"
             error={identifierError}
           />
-          <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', padding: '0.75rem', opacity: loading ? 0.7 : 1 }}>
+          <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
             {loading ? 'Sending code…' : 'Send code'}
           </button>
         </form>
@@ -200,7 +202,7 @@ export const ForgotPassword: React.FC = () => {
               value={values.confirm} onChange={(e) => setField('confirm', e.target.value)} onBlur={() => blurField('confirm')}
               error={errors.confirm}
             />
-            <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', padding: '0.75rem', opacity: loading ? 0.7 : 1 }}>
+            <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Updating…' : 'Set new password'}
             </button>
           </form>

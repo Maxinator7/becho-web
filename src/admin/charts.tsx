@@ -48,36 +48,39 @@ const parseDay = (d: string) => new Date(`${d}T00:00:00Z`);
 /* ------------------------------------------------------------------ */
 
 export const ChartCard: React.FC<{
-  title: string;
-  subtitle?: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   legend?: { label: string; color: string }[];
   table: { columns: string[]; rows: (string | number)[][] };
+  extra?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ title, subtitle, legend, table, children }) => {
+}> = ({ title, subtitle, legend, table, extra, children }) => {
   const [showTable, setShowTable] = useState(false);
   return (
-    <section className="glass-panel" style={{ padding: '1.1rem 1.25rem', minWidth: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.75rem' }}>
-        <div>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>{title}</h3>
-          {subtitle && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{subtitle}</div>}
+    <section className="a-card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="a-card__head" style={{ marginBottom: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <h2 className="a-card__title">{title}</h2>
+          {subtitle && <div className="a-card__sub">{subtitle}</div>}
         </div>
-        <button
-          type="button"
-          className="adm-btn"
-          onClick={() => setShowTable((s) => !s)}
-          aria-pressed={showTable}
-          title={showTable ? 'Show chart' : 'Show as table'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', color: 'var(--text-secondary)', padding: '0.25rem 0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}
-        >
-          {showTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
-          {showTable ? 'Chart' : 'Table'}
-        </button>
+        <div className="a-row" style={{ gap: 10 }}>
+          {extra}
+          <button
+            type="button"
+            onClick={() => setShowTable((s) => !s)}
+            aria-pressed={showTable}
+            title={showTable ? 'Show chart' : 'Show as table'}
+            className="a-btn a-btn--soft a-btn--sm"
+          >
+            {showTable ? <BarChart3 size={13} /> : <Table2 size={13} />}
+            {showTable ? 'Chart' : 'Table'}
+          </button>
+        </div>
       </div>
       {legend && legend.length > 1 && !showTable && (
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <div className="a-legend" style={{ marginBottom: 10 }}>
           {legend.map((l) => (
-            <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            <span key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 14, height: 3, borderRadius: 2, background: l.color }} />
               {l.label}
             </span>
@@ -90,14 +93,14 @@ export const ChartCard: React.FC<{
 };
 
 const DataTable: React.FC<{ columns: string[]; rows: (string | number)[][] }> = ({ columns, rows }) => (
-  <div className="adm-table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
-    <table className="adm-table" style={{ fontSize: '0.8rem' }}>
+  <div className="a-table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
+    <table className="a-table a-table--compact" style={{ fontSize: '0.8rem' }}>
       <thead>
-        <tr>{columns.map((c, i) => <th key={c} className={i > 0 ? 'adm-num' : undefined}>{c}</th>)}</tr>
+        <tr>{columns.map((c, i) => <th key={c} className={i > 0 ? 'a-td-num' : undefined}>{c}</th>)}</tr>
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={i}>{r.map((v, j) => <td key={j} className={j > 0 ? 'adm-num' : undefined}>{typeof v === 'number' ? fmtNum(v) : v}</td>)}</tr>
+          <tr key={i}>{r.map((v, j) => <td key={j} className={j > 0 ? 'a-td-num' : undefined}>{typeof v === 'number' ? fmtNum(v) : v}</td>)}</tr>
         ))}
       </tbody>
     </table>
@@ -105,7 +108,7 @@ const DataTable: React.FC<{ columns: string[]; rows: (string | number)[][] }> = 
 );
 
 export const ChartEmpty: React.FC<{ text: string; height?: number }> = ({ text, height = 180 }) => (
-  <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', border: '1px dashed var(--border-strong)', borderRadius: '8px' }}>
+  <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--a-muted)', fontSize: '0.85rem', border: '1px dashed var(--a-border-strong)', borderRadius: '8px' }}>
     {text}
   </div>
 );
@@ -149,7 +152,7 @@ export const LineChart: React.FC<{ days: string[]; series: LineSeries[]; height?
             role="img"
             aria-label={`${series.map((s) => s.label).join(', ')} per day. Use arrow keys to inspect days.`}
             tabIndex={0}
-            className="adm-focus"
+           
             style={{ display: 'block', borderRadius: 6 }}
             onMouseMove={(e) => setHover(indexAt(e.clientX, e.currentTarget.getBoundingClientRect()))}
             onMouseLeave={() => setHover(null)}
@@ -163,7 +166,7 @@ export const LineChart: React.FC<{ days: string[]; series: LineSeries[]; height?
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={m.l} x2={width - m.r} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--viz-axis)' : 'var(--viz-grid)'} strokeWidth={1} />
-                <text x={m.l - 6} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <text x={m.l - 6} y={y(t)} dy="0.32em" textAnchor="end" fontSize={11} fill="var(--a-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {tickLabel(t, top)}
                 </text>
               </g>
@@ -174,7 +177,7 @@ export const LineChart: React.FC<{ days: string[]; series: LineSeries[]; height?
               if (fromEnd % labelEvery !== 0) return null;
               if (i < labelEvery * 0.6 && i !== 0 && fromEnd !== 0) return null;
               return (
-                <text key={d} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize={11} fill="var(--text-muted)">
+                <text key={d} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize={11} fill="var(--a-muted)">
                   {dayShort.format(parseDay(d))}
                 </text>
               );
@@ -192,7 +195,7 @@ export const LineChart: React.FC<{ days: string[]; series: LineSeries[]; height?
               <g pointerEvents="none">
                 <line x1={x(hover)} x2={x(hover)} y1={m.t} y2={m.t + ih} stroke="var(--viz-axis)" strokeWidth={1} />
                 {series.map((s) => (
-                  <circle key={s.key} cx={x(hover)} cy={y(s.values[hover])} r={4.5} fill={s.color} stroke="var(--bg-secondary)" strokeWidth={2} />
+                  <circle key={s.key} cx={x(hover)} cy={y(s.values[hover])} r={4.5} fill={s.color} stroke="var(--a-surface)" strokeWidth={2} />
                 ))}
               </g>
             )}
@@ -203,16 +206,16 @@ export const LineChart: React.FC<{ days: string[]; series: LineSeries[]; height?
               style={{
                 position: 'absolute', top: 4, pointerEvents: 'none',
                 left: x(hover) > width - 190 ? Math.max(0, x(hover) - 182) : x(hover) + 12,
-                width: 170, background: 'var(--bg-secondary)', border: '1px solid var(--border-strong)', borderRadius: 8,
-                boxShadow: 'var(--shadow)', padding: '0.5rem 0.65rem', fontSize: '0.78rem', zIndex: 2,
+                width: 170, background: 'var(--a-surface)', border: '1px solid var(--a-border-strong)', borderRadius: 8,
+                boxShadow: 'var(--a-shadow-lg)', padding: '0.5rem 0.65rem', fontSize: '0.78rem', zIndex: 2,
               }}
             >
               <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{dayLong.format(parseDay(days[hover]))}</div>
               {series.map((s) => (
-                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-secondary)' }}>
+                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--a-text-2)' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
                   <span style={{ flex: 1 }}>{s.label}</span>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(s.values[hover])}</span>
+                  <span style={{ color: 'var(--a-text)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(s.values[hover])}</span>
                 </div>
               ))}
             </div>
@@ -246,22 +249,22 @@ export const HBarChart: React.FC<{
             key={r.label}
             role="listitem"
             tabIndex={0}
-            className="adm-focus"
+           
             aria-label={`${r.label}: ${fmtNum(r.value)}${suffix ? ` (${suffix})` : ''}`}
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
             onFocus={() => setHover(i)}
             onBlur={() => setHover(null)}
-            style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 32%) minmax(0, 1fr)', alignItems: 'center', gap: '0.75rem', borderRadius: 6, padding: '2px 4px', background: hover === i ? 'var(--surface-2)' : 'transparent' }}
+            style={{ display: 'grid', gridTemplateColumns: 'minmax(90px, 32%) minmax(0, 1fr)', alignItems: 'center', gap: '0.75rem', borderRadius: 6, padding: '2px 4px', background: hover === i ? 'var(--a-surface-2)' : 'transparent' }}
           >
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.label}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--a-text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.label}>
               {r.label}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
               <div style={{ flex: `0 1 ${pct}%`, minWidth: r.value > 0 ? 4 : 0, height: 16, background: color, borderRadius: '0 4px 4px 0', opacity: hover === null || hover === i ? 1 : 0.55, transition: 'opacity 0.15s' }} />
               <span style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                 {fmtNum(r.value)}
-                {suffix && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {suffix}</span>}
+                {suffix && <span style={{ fontWeight: 400, color: 'var(--a-muted)' }}> · {suffix}</span>}
               </span>
             </div>
           </div>
