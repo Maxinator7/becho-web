@@ -13,6 +13,8 @@ import { Favorites } from './pages/Marketplace/Favorites';
 import { Login } from './pages/Auth/Login';
 import { Register } from './pages/Auth/Register';
 import { VerifyAccount } from './pages/Auth/VerifyAccount';
+import { ForgotPassword } from './pages/Auth/ForgotPassword';
+import { Account } from './pages/Account/Account';
 import { CreateListing } from './pages/Marketplace/CreateListing';
 import { MyListings } from './pages/Marketplace/MyListings';
 import { AdminRedirect, NotFound } from './pages/NotFound';
@@ -30,11 +32,14 @@ export const App: React.FC = () => {
                 <Route path="/listings/:id" element={<ProductDetails />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
                 <Route path="/verify" element={<RequireAuth><VerifyAccount /></RequireAuth>} />
                 <Route path="/chat" element={<RequireAuth><Chat /></RequireAuth>} />
                 <Route path="/favorites" element={<RequireAuth><Favorites /></RequireAuth>} />
                 <Route path="/my-listings" element={<RequireAuth><MyListings /></RequireAuth>} />
                 <Route path="/create-listing" element={<RequireAuth verified><CreateListing /></RequireAuth>} />
+                <Route path="/listings/:id/edit" element={<RequireAuth verified><CreateListing /></RequireAuth>} />
                 <Route path="/admin/*" element={<AdminRedirect />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

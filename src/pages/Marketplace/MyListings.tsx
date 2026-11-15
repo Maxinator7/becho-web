@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation as useRouterLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
-import { formatPrice, LISTING_STATUS_LABELS } from '../../utils/format';
-import { ShoppingBag, PlusCircle, CheckCircle2 } from 'lucide-react';
+import { formatPrice, LISTING_STATUS_LABELS, REVIEW_ACTION_LABELS } from '../../utils/format';
+import { ShoppingBag, PlusCircle, CheckCircle2, MessageSquareWarning, Pencil } from 'lucide-react';
+import { VerifiedBadge } from '../../components/VerifiedBadge';
 
 interface ListingItem {
   id: string;
@@ -15,13 +16,17 @@ interface ListingItem {
   category?: { name: string };
   media?: { url: string }[];
   sanitization?: { status: string; reasons: string[] | null } | null;
+  verifiedAt?: string | null;
+  /** Latest seller-visible staff remark (max 1). */
+  reviews?: { action: string; remark: string | null; createdAt: string }[];
 }
 
-type Action = 'submit' | 'renew' | 'mark-sold' | 'mark-available' | 'delete';
+type Action = 'edit' | 'submit' | 'renew' | 'mark-sold' | 'mark-available' | 'delete';
 
 const ACTIONS_BY_STATUS: Record<string, { action: Action; label: string; confirm?: string }[]> = {
-  DRAFT: [{ action: 'submit', label: 'Publish' }, { action: 'delete', label: 'Delete', confirm: 'Delete this draft?' }],
-  REJECTED: [{ action: 'submit', label: 'Resubmit' }, { action: 'delete', label: 'Delete', confirm: 'Delete this listing?' }],
+  DRAFT: [{ action: 'submit', label: 'Publish' }, { action: 'edit', label: 'Edit' }, { action: 'delete', label: 'Delete', confirm: 'Delete this draft?' }],
+  CHANGES_REQUESTED: [{ action: 'edit', label: 'Edit & resubmit' }, { action: 'delete', label: 'Delete', confirm: 'Delete this listing?' }],
+  REJECTED: [{ action: 'edit', label: 'Edit & resubmit' }, { action: 'delete', label: 'Delete', confirm: 'Delete this listing?' }],
   LIVE: [{ action: 'mark-sold', label: 'Mark as sold', confirm: 'Mark this item as sold? Open offers will be closed.' }],
   RESERVED: [
     { action: 'mark-sold', label: 'Mark as sold' },
@@ -38,6 +43,7 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 export const MyListings: React.FC = () => {
+  const navigate = useNavigate();
   const notice = ((useRouterLocation().state || {}) as { notice?: string }).notice;
   const [listings, setListings] = useState<ListingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +62,10 @@ export const MyListings: React.FC = () => {
   }, []);
 
   const runAction = async (item: ListingItem, action: Action, confirmText?: string) => {
+    if (action === 'edit') {
+      navigate(`/listings/${item.id}/edit`);
+      return;
+    }
     if (confirmText && !window.confirm(confirmText)) return;
     setBusyId(item.id);
     setError(null);
@@ -81,12 +91,12 @@ export const MyListings: React.FC = () => {
       </div>
 
       {notice && (
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--success)', background: 'rgba(16,185,129,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+        <div role="status" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--success)', background: 'color-mix(in srgb, var(--success) 12%, transparent)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>
           <CheckCircle2 size={18} /> {notice}
         </div>
       )}
       {error && (
-        <div style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>
+        <div role="alert" style={{ color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem' }}>{error}</div>
       )}
 
       {loading ? (
@@ -100,6 +110,8 @@ export const MyListings: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
           {listings.map((item) => {
             const status = LISTING_STATUS_LABELS[item.status] ?? { label: item.status, color: 'var(--text-secondary)' };
+            const review = item.reviews?.[0];
+            const remarkColor = item.status === 'REJECTED' || item.status === 'SUSPENDED' ? 'var(--danger)' : item.status === 'CHANGES_REQUESTED' ? 'var(--warning)' : 'var(--accent-primary)';
             const reasons = item.status === 'PENDING_REVIEW' || item.status === 'REJECTED' ? item.sanitization?.reasons ?? [] : [];
             return (
               <div key={item.id} className="glass-panel" style={{ padding: '1.25rem', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -115,7 +127,7 @@ export const MyListings: React.FC = () => {
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{item.title}</h3>
-                  <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: `${status.color}33`, color: status.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '12px', background: `color-mix(in srgb, ${status.color} 14%, transparent)`, color: status.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {status.label}
                   </span>
                 </div>
@@ -125,6 +137,27 @@ export const MyListings: React.FC = () => {
                   {item.category?.name || 'General'}
                   {item.status === 'LIVE' && item.expiresAt && <> · expires {new Date(item.expiresAt).toLocaleDateString('en-IN')}</>}
                 </div>
+                {item.verifiedAt && item.status === 'LIVE' && <div style={{ marginTop: '0.5rem' }}><VerifiedBadge /></div>}
+                {review?.remark && (
+                  <div
+                    style={{
+                      marginTop: '0.75rem', padding: '0.6rem 0.75rem', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.45,
+                      color: 'var(--text-primary)',
+                      background: `color-mix(in srgb, ${remarkColor} 10%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${remarkColor} 35%, transparent)`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 700, color: remarkColor, fontSize: '0.78rem', marginBottom: '0.2rem' }}>
+                      <MessageSquareWarning size={14} />
+                      {item.status === 'CHANGES_REQUESTED' ? 'What to change' : REVIEW_ACTION_LABELS[review.action] ?? 'Note from Becho'}
+                      <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {new Date(review.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                    </div>
+                    <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{review.remark}</div>
+                  </div>
+                )}
+                {item.status === 'CHANGES_REQUESTED' && !review?.remark && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>Our team asked for changes before this can go live.</div>
+                )}
                 {reasons.length > 0 && (
                   <div style={{ fontSize: '0.8rem', color: 'var(--warning)', marginTop: '0.5rem' }}>
                     Flagged: {reasons.map((r) => REASON_LABELS[r] ?? r).join(', ')}
@@ -140,9 +173,10 @@ export const MyListings: React.FC = () => {
                       className={action === 'delete' ? undefined : 'btn-primary'}
                       style={{
                         padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderRadius: '6px', cursor: 'pointer',
-                        ...(action === 'delete' ? { background: 'transparent', border: '1px solid rgba(239,68,68,0.5)', color: 'var(--danger)' } : {}),
+                        ...(action === 'delete' ? { background: 'transparent', border: '1px solid color-mix(in srgb, var(--danger) 50%, transparent)', color: 'var(--danger)' } : {}),
                       }}
                     >
+                      {action === 'edit' && <Pencil size={13} style={{ marginRight: '0.3rem', verticalAlign: '-2px' }} />}
                       {label}
                     </button>
                   ))}

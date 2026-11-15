@@ -2,112 +2,171 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { fetchApi, AuthTokens } from '../../api/client';
 import { useAuth, UserProfile } from '../../context/AuthContext';
-import { UserPlus, AlertCircle } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
+import { Alert, AuthCard, PasswordChecklist, PasswordField, TextField, linkStyle } from '../../components/FormControls';
+import {
+  FieldErrors, fieldErrorsFrom, focusFirstError, hasErrors, normalizeIndianMobile,
+  validateConfirm, validateEmail, validateMobile, validateName, validatePassword,
+} from '../../utils/validation';
+import { OtpInfo, saveOtpInfo } from './otpInfo';
+
+type Field = 'name' | 'mobile' | 'email' | 'password' | 'confirm';
+const FIELDS: Field[] = ['name', 'mobile', 'email', 'password', 'confirm'];
+type Values = Record<Field, string>;
+
+const validators: Record<Field, (v: Values) => string | undefined> = {
+  name: (v) => validateName(v.name),
+  mobile: (v) => validateMobile(v.mobile),
+  email: (v) => validateEmail(v.email),
+  password: (v) => validatePassword(v.password),
+  confirm: (v) => validateConfirm(v.password, v.confirm),
+};
 
 export const Register: React.FC = () => {
-  const [displayName, setDisplayName] = useState('');
-  const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [values, setValues] = useState<Values>({ name: '', mobile: '', email: '', password: '', confirm: '' });
+  const [errors, setErrors] = useState<FieldErrors<Field>>({});
+  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
+  const [formError, setFormError] = useState<{ code: string; message: string } | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    const isEmail = emailOrPhone.includes('@');
-    const body = {
-      displayName,
-      email: isEmail ? emailOrPhone.trim() : undefined,
-      phone: !isEmail ? emailOrPhone.trim() : undefined,
-      password,
-    };
-
-    const res = await fetchApi<{ tokens: AuthTokens; user: UserProfile; verificationMessage: string; devOtp?: string }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(body),
+  const set = (field: Field, value: string) => {
+    const next = { ...values, [field]: value };
+    setValues(next);
+    const recheck: Field[] = field === 'password' ? ['password', 'confirm'] : [field];
+    setErrors((e) => {
+      const out = { ...e };
+      for (const f of recheck) if (touched[f]) out[f] = validators[f](next);
+      return out;
     });
-
-    setLoading(false);
-    if (res.success && res.data) {
-      login(res.data.tokens, res.data.user);
-      navigate('/verify', { state: { otp: { verificationMessage: res.data.verificationMessage, devOtp: res.data.devOtp } } });
-    } else {
-      setError(res.error?.message || 'Registration failed.');
-    }
   };
 
+  const blur = (field: Field) => {
+    setTouched((t) => ({ ...t, [field]: true }));
+    setErrors((e) => ({ ...e, [field]: validators[field](values) }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
+    setFormError(null);
+    const trimmed = { ...values, name: values.name.trim().replace(/\s+/g, ' '), email: values.email.trim(), mobile: values.mobile.trim() };
+    setValues(trimmed);
+    const next: FieldErrors<Field> = {};
+    for (const f of FIELDS) next[f] = validators[f](trimmed);
+    setErrors(next);
+    setTouched({ name: true, mobile: true, email: true, password: true, confirm: true });
+    if (hasErrors(next)) {
+      focusFirstError(next, FIELDS, 'reg-');
+      return;
+    }
+
+    setLoading(true);
+    const res = await fetchApi<{ tokens: AuthTokens; user: UserProfile } & OtpInfo>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName: trimmed.name,
+        phone: `+91${normalizeIndianMobile(trimmed.mobile)}`,
+        email: trimmed.email,
+        password: trimmed.password,
+      }),
+    });
+    setLoading(false);
+
+    if (res.success && res.data) {
+      const otp: OtpInfo = {
+        otpSentTo: res.data.otpSentTo,
+        verificationMessage: res.data.verificationMessage,
+        devOtp: res.data.devOtp,
+        sentAt: Date.now(),
+      };
+      saveOtpInfo(otp);
+      login(res.data.tokens, res.data.user);
+      navigate('/verify', { state: { otp } });
+      return;
+    }
+
+    const code = res.error?.code ?? 'UNKNOWN';
+    if (code === 'PHONE_TAKEN' || code === 'EMAIL_TAKEN') {
+      const field: Field = code === 'PHONE_TAKEN' ? 'mobile' : 'email';
+      const msg = code === 'PHONE_TAKEN' ? 'This mobile number is already registered.' : 'This email is already registered.';
+      setErrors((e2) => ({ ...e2, [field]: msg }));
+      setFormError({ code, message: msg });
+      focusFirstError({ [field]: msg }, FIELDS, 'reg-');
+      return;
+    }
+    const fieldErrs = fieldErrorsFrom(res, FIELDS, { displayName: 'name', phone: 'mobile' });
+    if (hasErrors(fieldErrs)) {
+      setErrors(fieldErrs);
+      focusFirstError(fieldErrs, FIELDS, 'reg-');
+      return;
+    }
+    setFormError({ code, message: res.error?.message || 'Registration failed. Please try again.' });
+  };
+
+  const existingIdentifier = formError?.code === 'PHONE_TAKEN' ? values.mobile.trim() : values.email.trim();
+
   return (
-    <div style={{ maxWidth: '400px', margin: '4rem auto', padding: '0 1rem' }}>
-      <div className="glass-panel" style={{ padding: '2.5rem' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', fontSize: '1.75rem' }}>
-          Join <span className="gradient-text">BECHO</span> Marketplace
-        </h2>
-
-        {error && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem' }}>
-            <AlertCircle size={18} />
-            <span>{error}</span>
-          </div>
-        )}
-
-          <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Full Name / Display Name
-              </label>
-              <input
-                type="text"
-                required
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Your name"
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
-              />
+    <AuthCard
+      maxWidth={460}
+      title={<>Join <span className="gradient-text">BECHO</span></>}
+      subtitle="Buy and sell near you. It takes a minute."
+      footer={<>Already registered? <Link to="/login" style={linkStyle}>Sign in</Link></>}
+    >
+      {formError && (
+        <Alert tone={formError.code === 'NETWORK_ERROR' ? 'warning' : 'danger'} style={{ marginBottom: '1rem' }}>
+          {formError.message}
+          {(formError.code === 'PHONE_TAKEN' || formError.code === 'EMAIL_TAKEN') && (
+            <div style={{ marginTop: '0.35rem' }}>
+              <Link to="/login" state={{ identifier: existingIdentifier }} style={{ color: 'inherit', fontWeight: 700, textDecoration: 'underline' }}>Sign in</Link>
+              {' '}or{' '}
+              <Link to="/forgot-password" state={{ identifier: existingIdentifier }} style={{ color: 'inherit', fontWeight: 700, textDecoration: 'underline' }}>reset your password</Link>.
             </div>
+          )}
+        </Alert>
+      )}
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Mobile number or email
-              </label>
-              <input
-                type="text"
-                required
-                value={emailOrPhone}
-                onChange={(e) => setEmailOrPhone(e.target.value)}
-                placeholder="98765 43210 or you@example.com"
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
-              />
-            </div>
+      <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+        <TextField
+          id="reg-name" label="Full name" name="name" autoComplete="name" required maxLength={60}
+          value={values.name} onChange={(e) => set('name', e.target.value)} onBlur={() => blur('name')}
+          placeholder="e.g. Priya Sharma" error={errors.name}
+        />
+        <TextField
+          id="reg-mobile" label="Mobile number" name="tel" type="tel" inputMode="numeric" autoComplete="tel-national" required
+          prefix="+91" maxLength={16}
+          value={values.mobile} onChange={(e) => set('mobile', e.target.value.replace(/[^\d\s+-]/g, ''))} onBlur={() => blur('mobile')}
+          placeholder="98765 43210" error={errors.mobile}
+          hint="We’ll use this to keep your account secure. It isn’t shown to buyers."
+        />
+        <TextField
+          id="reg-email" label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required
+          value={values.email} onChange={(e) => set('email', e.target.value)} onBlur={() => blur('email')}
+          placeholder="you@example.com" error={errors.email}
+          hint="We’ll email you a 6-digit code to verify your account."
+        />
+        <PasswordField
+          id="reg-password" label="Password" name="new-password" autoComplete="new-password" required maxLength={128}
+          value={values.password} onChange={(e) => set('password', e.target.value)} onBlur={() => blur('password')}
+          error={errors.password}
+        >
+          <PasswordChecklist password={values.password} />
+        </PasswordField>
+        <PasswordField
+          id="reg-confirm" label="Confirm password" name="confirm-password" autoComplete="new-password" required maxLength={128}
+          value={values.confirm} onChange={(e) => set('confirm', e.target.value)} onBlur={() => blur('confirm')}
+          error={errors.confirm}
+        />
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                minLength={8}
-                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', background: 'var(--input-bg)', border: '1px solid var(--input-border)', color: 'var(--input-text)' }}
-              />
-            </div>
-
-            <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <UserPlus size={18} />
-              {loading ? 'Creating account...' : 'Create Account'}
-            </button>
-          </form>
-
-        <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '1.5rem', fontSize: '0.9rem' }}>
-          Already registered? <Link to="/login" style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>Sign In</Link>
-        </p>
-      </div>
-    </div>
+        <button
+          type="submit" disabled={loading} aria-busy={loading} className="btn-primary"
+          style={{ width: '100%', padding: '0.75rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', opacity: loading ? 0.7 : 1 }}
+        >
+          <UserPlus size={18} />
+          {loading ? 'Creating account…' : 'Create account'}
+        </button>
+      </form>
+    </AuthCard>
   );
 };

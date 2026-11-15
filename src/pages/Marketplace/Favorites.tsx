@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { formatPrice } from '../../utils/format';
 import { Navbar } from '../../components/Navbar';
+import { VerifiedBadge } from '../../components/VerifiedBadge';
 import { useAuth } from '../../context/AuthContext';
 import { Heart, MapPin } from 'lucide-react';
 
@@ -16,6 +17,7 @@ interface FavoriteListing {
   category: { name: string };
   media: { url: string }[];
   seller: { displayName: string };
+  verifiedAt?: string | null;
 }
 
 export const Favorites: React.FC = () => {
@@ -87,6 +89,7 @@ export const Favorites: React.FC = () => {
               >
                 <div style={{ position: 'relative', height: '180px' }}>
                   <img src={thumb} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {item.verifiedAt && <VerifiedBadge overlay style={{ position: 'absolute', top: '10px', left: '10px' }} />}
                   <button
                     onClick={(e) => handleRemoveFavorite(item.id, e)}
                     style={{

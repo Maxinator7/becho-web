@@ -4,7 +4,8 @@ import { fetchApi } from '../../api/client';
 import { useLocation } from '../../context/LocationContext';
 import { formatPrice, CONDITION_LABELS } from '../../utils/format';
 import { Navbar } from '../../components/Navbar';
-import { Search, SlidersHorizontal, ChevronRight, MapPin, ArrowUpDown, ChevronLeft } from 'lucide-react';
+import { VerifiedBadge } from '../../components/VerifiedBadge';
+import { Search, SlidersHorizontal, ChevronRight, MapPin, ArrowUpDown, ChevronLeft, ShieldCheck } from 'lucide-react';
 
 interface CategoryNode {
   id: string;
@@ -24,6 +25,7 @@ interface ListingItem {
   category: { name: string; slug: string };
   media: { url: string }[];
   seller: { displayName: string };
+  verifiedAt?: string | null;
 }
 
 interface PaginationInfo {
@@ -51,6 +53,7 @@ export const Browse: React.FC = () => {
   const [condition, setCondition] = useState<string>(searchParams.get('condition') || '');
   const [sortOrder, setSortOrder] = useState<string>(searchParams.get('sort') || 'newest');
   const [currentPage, setCurrentPage] = useState<number>(Number(searchParams.get('page')) || 1);
+  const [verifiedOnly, setVerifiedOnly] = useState<boolean>(searchParams.get('verified') === 'true');
 
   // Load categories
   useEffect(() => {
@@ -71,6 +74,7 @@ export const Browse: React.FC = () => {
     if (maxPrice) params.set('maxPrice', maxPrice);
     if (condition) params.set('condition', condition);
     if (sortOrder) params.set('sort', sortOrder);
+    if (verifiedOnly) params.set('verified', 'true');
     params.set('page', String(currentPage));
     params.set('limit', '12');
 
@@ -93,7 +97,7 @@ export const Browse: React.FC = () => {
 
   useEffect(() => {
     loadListings();
-  }, [selectedCategoryId, searchQuery, minPrice, maxPrice, condition, sortOrder, currentPage, selectedArea]);
+  }, [selectedCategoryId, searchQuery, minPrice, maxPrice, condition, sortOrder, verifiedOnly, currentPage, selectedArea]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +112,7 @@ export const Browse: React.FC = () => {
     setMaxPrice('');
     setCondition('');
     setSortOrder('newest');
+    setVerifiedOnly(false);
     setCurrentPage(1);
   };
 
@@ -243,6 +248,27 @@ export const Browse: React.FC = () => {
               </div>
             </div>
 
+            {/* Verified only */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label htmlFor="browse-verified" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', cursor: 'pointer' }}>
+                <span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                    <ShieldCheck size={16} color="var(--success)" /> Verified only
+                  </span>
+                  <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Listings checked by the Becho team</span>
+                </span>
+                <input
+                  id="browse-verified"
+                  type="checkbox"
+                  role="switch"
+                  aria-checked={verifiedOnly}
+                  checked={verifiedOnly}
+                  onChange={(e) => { setVerifiedOnly(e.target.checked); setCurrentPage(1); }}
+                  style={{ width: '18px', height: '18px', accentColor: 'var(--success)', flexShrink: 0 }}
+                />
+              </label>
+            </div>
+
             {/* Condition Filter */}
             <div>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, display: 'block', marginBottom: '0.5rem' }}>
@@ -357,6 +383,7 @@ export const Browse: React.FC = () => {
                         >
                           {item.category?.name || 'General'}
                         </span>
+                        {item.verifiedAt && <VerifiedBadge overlay style={{ position: 'absolute', top: '10px', right: '10px' }} />}
                       </div>
 
                       <div style={{ padding: '1.15rem', display: 'flex', flexDirection: 'column', flex: 1 }}>

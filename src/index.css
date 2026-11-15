@@ -211,3 +211,25 @@ button {
 @keyframes becho-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Navbar links: icon + label, collapsing to icon-only (with tooltip) when space is tight. */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.nav-name {
+  display: inline-block;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+@media (max-width: 1360px) {
+  .nav-label { display: none; }
+}

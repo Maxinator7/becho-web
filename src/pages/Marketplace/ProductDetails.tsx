@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
+import { VerifiedBadge } from '../../components/VerifiedBadge';
 import { useAuth } from '../../context/AuthContext';
 import { formatPrice, CONDITION_LABELS, LISTING_STATUS_LABELS } from '../../utils/format';
 import { Heart, MessageSquare, MapPin, Calendar, ShieldCheck, ArrowLeft, Layers, Tag, X, TrendingDown, Play } from 'lucide-react';
@@ -18,6 +19,7 @@ interface ListingDetail {
   cityCode: string;
   locationVisibility: string;
   createdAt: string;
+  verifiedAt?: string | null;
   seller: { id: string; displayName: string; createdAt: string };
   category: { id: string; name: string; slug: string };
   attributes: {
@@ -332,7 +334,13 @@ export const ProductDetails: React.FC = () => {
               </span>
             </div>
 
-            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '1rem', lineHeight: '1.3' }}>{listing.title}</h1>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: listing.verifiedAt ? '0.5rem' : '1rem', lineHeight: '1.3' }}>{listing.title}</h1>
+            {listing.verifiedAt && (
+              <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <VerifiedBadge size="md" />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Checked by the Becho team</span>
+              </div>
+            )}
             <div style={{ fontSize: '2.25rem', fontWeight: 800, color: 'var(--accent-primary)', marginBottom: '1.5rem' }}>{formatPrice(listing.price)}</div>
             {listing.status !== 'LIVE' && (
               <div style={{ marginTop: '-1rem', marginBottom: '1.25rem', fontWeight: 700, color: LISTING_STATUS_LABELS[listing.status]?.color ?? 'var(--text-secondary)' }}>

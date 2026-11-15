@@ -1,11 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useParams } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
-import { PlusCircle, Upload, AlertCircle } from 'lucide-react';
+import { PlusCircle, Upload, AlertCircle, Pencil, MessageSquareWarning } from 'lucide-react';
 import { MediaItem, MediaUploader } from '../../components/MediaUploader';
 import { DEFAULT_LIMITS, MediaLimits, getMediaLimits } from '../../utils/media';
+import { EDITABLE_LISTING_STATUSES, LISTING_STATUS_LABELS, REVIEW_ACTION_LABELS } from '../../utils/format';
+
+/** Shape of GET /listings/:id used to pre-fill the form in edit mode. */
+interface ExistingListing {
+  id: string;
+  title: string;
+  description: string;
+  price: number | string;
+  condition: string;
+  status: string;
+  cityCode: string;
+  categoryId: string;
+  seller: { id: string };
+  attributes: { attributeDefinitionId: string; valueText?: string | null; valueNumber?: number | string | null; valueBoolean?: boolean | null }[];
+  media: { id: string; url: string; mediaType?: string }[];
+}
+
+interface Review { id: string; action: string; remark: string | null; createdAt: string }
 
 interface CategoryNode {
   id: string;
@@ -28,6 +46,9 @@ interface AttributeDefinition {
 }
 
 export const CreateListing: React.FC = () => {
+  // /listings/:id/edit reuses this form: it pre-fills from the listing, then PATCHes and resubmits.
+  const { id: listingId } = useParams<{ id: string }>();
+  const isEdit = !!listingId;
   const { user } = useAuth();
   const navigate = useNavigate();
   const { areas, selectedArea } = useLocation();
@@ -55,6 +76,60 @@ export const CreateListing: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Edit mode
+  const [existing, setExisting] = useState<ExistingListing | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [latestReview, setLatestReview] = useState<Review | null>(null);
+
+  useEffect(() => {
+    if (!listingId || !user) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetchApi<ExistingListing>(`/listings/${listingId}`);
+      if (cancelled) return;
+      if (!res.success || !res.data) {
+        setLoadError(res.error?.message || 'Could not load this listing.');
+        return;
+      }
+      const l = res.data;
+      if (l.seller.id !== user.id) {
+        setLoadError('You can only edit your own listings.');
+        return;
+      }
+      if (!EDITABLE_LISTING_STATUSES.includes(l.status)) {
+        setLoadError(`This listing is ${LISTING_STATUS_LABELS[l.status]?.label.toLowerCase() ?? l.status} and can’t be edited right now.`);
+        return;
+      }
+      setExisting(l);
+      setTitle(l.title);
+      setDescription(l.description);
+      setPrice(String(Number(l.price)));
+      setCondition(l.condition);
+      setCityCode(l.cityCode);
+      setMedia(
+        l.media.map((m) => ({
+          key: `existing-${m.id}`,
+          kind: m.mediaType === 'VIDEO' ? 'VIDEO' : 'IMAGE',
+          previewUrl: m.url,
+          status: 'done',
+          progress: 1,
+          mediaId: m.id,
+        }))
+      );
+      const initialValues: Record<string, any> = {};
+      for (const a of l.attributes) {
+        const v = a.valueText ?? (a.valueNumber !== null && a.valueNumber !== undefined ? String(Number(a.valueNumber)) : a.valueBoolean ?? undefined);
+        if (v !== undefined && v !== null) initialValues[a.attributeDefinitionId] = v;
+      }
+      handleSubcategoryChange(l.categoryId, initialValues);
+
+      const reviews = await fetchApi<Review[]>(`/listings/${listingId}/reviews`);
+      if (!cancelled && reviews.success && reviews.data?.length) setLatestReview(reviews.data[0]);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listingId, user?.id]);
+
   useEffect(() => {
     fetchApi<CategoryNode[]>('/categories').then((res) => {
       if (res.success && res.data) {
@@ -63,10 +138,10 @@ export const CreateListing: React.FC = () => {
     });
   }, []);
 
-  const handleSubcategoryChange = (subcatId: string) => {
+  const handleSubcategoryChange = (subcatId: string, initialValues: Record<string, any> = {}) => {
     setSelectedSubcategoryId(subcatId);
     setAttributes([]);
-    setAttributeValues({});
+    setAttributeValues(initialValues);
     if (!subcatId) return;
 
     fetchApi<AttributeDefinition[]>(`/categories/${subcatId}/attributes`).then((res) => {
@@ -127,9 +202,32 @@ export const CreateListing: React.FC = () => {
       attributes: attrArray,
       // Photos first (the first one is the cover shown in search results), then the video.
       media: [...media.filter((m) => m.kind === 'IMAGE'), ...media.filter((m) => m.kind === 'VIDEO')]
-        .filter((m) => m.status === 'done' && m.uploadId)
-        .map((m) => ({ uploadId: m.uploadId! })),
+        .filter((m) => m.status === 'done' && (m.uploadId || m.mediaId))
+        .map((m) => (m.mediaId ? { mediaId: m.mediaId } : { uploadId: m.uploadId! })),
     };
+
+    if (isEdit && existing) {
+      const saveRes = await fetchApi<{ id: string }>(`/listings/${existing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      if (!saveRes.success) {
+        setLoading(false);
+        setError(saveRes.error?.message || 'Could not save your changes.');
+        return;
+      }
+      const submitRes = await fetchApi<{ status: string }>(`/listings/${existing.id}/submit`, { method: 'POST' });
+      setLoading(false);
+      if (submitRes.success) {
+        navigate('/my-listings', {
+          state: {
+            notice: submitRes.data?.status === 'LIVE'
+              ? 'Changes saved — your listing is live again.'
+              : 'Changes saved and sent for review. We’ll let you know once it’s approved.',
+          },
+        });
+      } else {
+        setError(`Your changes were saved, but the listing could not be resubmitted: ${submitRes.error?.message || 'unknown error'}`);
+      }
+      return;
+    }
 
     const createRes = await fetchApi<{ id: string }>('/listings', {
       method: 'POST',
@@ -164,8 +262,24 @@ export const CreateListing: React.FC = () => {
 
       <div className="glass-panel" style={{ padding: '2.5rem' }}>
         <h2 style={{ marginBottom: '1.5rem', fontSize: '1.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <PlusCircle color="var(--accent-primary)" /> Post a New Listing
+          {isEdit ? <><Pencil color="var(--accent-primary)" /> Edit your listing</> : <><PlusCircle color="var(--accent-primary)" /> Post a New Listing</>}
         </h2>
+
+        {isEdit && loadError && (
+          <div role="alert" style={{ color: 'var(--danger)', background: 'color-mix(in srgb, var(--danger) 12%, transparent)', padding: '0.75rem 1rem', borderRadius: '8px' }}>
+            {loadError} <Link to="/my-listings" style={{ fontWeight: 700, textDecoration: 'underline' }}>Back to My Listings</Link>
+          </div>
+        )}
+        {isEdit && !loadError && !existing && <p style={{ color: 'var(--text-secondary)' }}>Loading your listing…</p>}
+
+        {isEdit && existing && latestReview?.remark && (
+          <div style={{ marginBottom: '1.5rem', padding: '0.85rem 1rem', borderRadius: '10px', color: 'var(--text-primary)', background: 'color-mix(in srgb, var(--warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, color: 'var(--warning)', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
+              <MessageSquareWarning size={16} /> {existing.status === 'CHANGES_REQUESTED' ? 'Our team asked for these changes' : REVIEW_ACTION_LABELS[latestReview.action] ?? 'Note from Becho'}
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '0.92rem' }}>{latestReview.remark}</div>
+          </div>
+        )}
 
         {error && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
@@ -174,6 +288,7 @@ export const CreateListing: React.FC = () => {
           </div>
         )}
 
+        {(!isEdit || existing) && (
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {/* Category Selection */}
           <div>
@@ -316,14 +431,17 @@ export const CreateListing: React.FC = () => {
             )}
           </div>
 
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            You can post up to {limits.listingsPerDay} listings a day.
-          </div>
+          {!isEdit && (
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              You can post up to {limits.listingsPerDay} listings a day.
+            </div>
+          )}
 
           <button type="submit" disabled={loading || uploading} className="btn-primary" style={{ width: '100%', padding: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', fontSize: '1rem' }}>
-            <Upload size={18} /> {uploading ? 'Uploading media…' : loading ? 'Submitting Listing...' : 'Publish Listing'}
+            <Upload size={18} /> {uploading ? 'Uploading media…' : loading ? (isEdit ? 'Saving…' : 'Submitting Listing...') : isEdit ? (existing?.status === 'DRAFT' ? 'Save & publish' : 'Save & resubmit') : 'Publish Listing'}
           </button>
         </form>
+        )}
       </div>
     </div>
   );

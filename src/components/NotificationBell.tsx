@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, MessageSquare, Tag, CheckCircle, XCircle, RotateCcw, ShieldAlert, Clock } from 'lucide-react';
+import { Bell, CheckCheck, MessageSquare, Tag, CheckCircle, XCircle, RotateCcw, ShieldAlert, ShieldCheck, Clock, PencilLine, MessageSquareText } from 'lucide-react';
 import { fetchApi } from '../api/client';
 import { AppNotification, notificationLink, useNotifications } from '../context/NotificationsContext';
 
@@ -16,6 +16,9 @@ const ICONS: Record<string, { Icon: typeof Bell; color: string }> = {
   LISTING_EXPIRED: { Icon: Clock, color: 'var(--text-secondary)' },
   LISTING_SOLD: { Icon: CheckCircle, color: 'var(--text-secondary)' },
   RESERVATION_RELEASED: { Icon: RotateCcw, color: 'var(--warning)' },
+  LISTING_CHANGES_REQUESTED: { Icon: PencilLine, color: 'var(--warning)' },
+  LISTING_VERIFIED: { Icon: ShieldCheck, color: 'var(--success)' },
+  LISTING_REMARK: { Icon: MessageSquareText, color: 'var(--accent-primary)' },
 };
 
 function timeAgo(iso: string) {

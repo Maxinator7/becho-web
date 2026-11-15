@@ -9,6 +9,8 @@ export interface MediaItem {
   status: 'uploading' | 'done' | 'error';
   progress: number;
   uploadId?: string;
+  /** Set for files already attached to the listing being edited (sent back as { mediaId }). */
+  mediaId?: string;
   error?: string;
 }
 
@@ -104,7 +106,7 @@ export const MediaUploader: React.FC<Props> = ({ items, onChange, limits }) => {
   const remove = (key: string) =>
     onChange((prev) => {
       const gone = prev.find((m) => m.key === key);
-      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      if (gone?.previewUrl.startsWith('blob:')) URL.revokeObjectURL(gone.previewUrl);
       return prev.filter((m) => m.key !== key);
     });
 
