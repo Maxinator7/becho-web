@@ -4,23 +4,18 @@ import { fetchApi, tokenStore } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
 import { useAuth, UserProfile } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { Copy, Check, ShieldCheck, Smartphone, Lock, Mail, Pencil, Heart, Bell, ChevronRight, LogOut, BadgeCheck, CalendarDays } from 'lucide-react';
+import {
+  ArrowRight, BadgeCheck, Bell, Check, ChevronRight, Copy, Handshake, Heart, List, Lock, LogOut, MessageSquare, Palette, Pencil, PlusCircle,
+} from 'lucide-react';
 import { Alert, PasswordChecklist, PasswordField, TextField } from '../../components/FormControls';
-import { Avatar, Chip } from '../../components/ui';
+import { Avatar, Chip, ListingCard, ListingCardData } from '../../components/ui';
 import { ThemeSwitch } from '../../components/ThemeToggle';
 import { MyListingItem, MyListingsPanel } from '../Marketplace/MyListings';
-import { formatCompactINR, formatPrice } from '../../utils/format';
 import {
   FieldErrors, fieldErrorsFrom, focusFirstError, formatIndianMobile, hasErrors, normalizeIndianMobile,
   validateConfirm, validateMobile, validateName, validatePassword,
 } from '../../utils/validation';
 
-
-const TrustChip: React.FC<{ ok: boolean; okLabel?: string; badLabel: string; badTone?: 'warning' | 'danger' | 'neutral' }> = ({ ok, okLabel = 'Verified', badLabel, badTone = 'warning' }) => (
-  ok
-    ? <Chip tone="success"><BadgeCheck size={12} /> {okLabel}</Chip>
-    : <Chip tone={badTone}>{badLabel}</Chip>
-);
 
 /* ───────────── profile (name, user code, email, mobile) ───────────── */
 
@@ -102,43 +97,45 @@ const ProfileSection: React.FC<{ user: UserProfile }> = ({ user }) => {
 
   const roleLabel = user.role === 'ADMIN' ? 'Admin' : user.role === 'MODERATOR' ? 'Moderator' : 'Member';
   const verifiedAccount = user.status === 'ACTIVE';
-  const allSet = verifiedAccount && !!user.emailVerifiedAt && !!user.phone;
 
   return (
-    <section className="card card-pad" aria-labelledby="acc-profile-title">
-      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <Avatar name={user.displayName} size="lg" />
-          {verifiedAccount && (
-            <span style={{ position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 99, background: 'var(--success-fill)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface)' }} title="Verified account">
-              <Check size={12} strokeWidth={3} />
-            </span>
-          )}
-        </div>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          {!editingName && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <h2 id="acc-profile-title" style={{ fontSize: '1.2rem', fontWeight: 700, overflowWrap: 'anywhere' }}>{user.displayName}</h2>
-              <Chip tone="primary" upper>{roleLabel}</Chip>
-              <button type="button" onClick={() => { setEditingName(true); setNameMsg(null); }} className="icon-btn" aria-label="Edit name" title="Edit name" style={{ width: 30, height: 30, color: 'var(--text-muted)' }}>
-                <Pencil size={15} />
-              </button>
-            </div>
-          )}
-          {editingName && <h2 id="acc-profile-title" className="sr-only">Profile</h2>}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
-            {user.userCode && (
-              <>
-                <code className="chip chip-neutral chip-square" style={{ fontSize: '0.78rem', letterSpacing: '0.06em', fontWeight: 700 }} title="Your user code. Share it with Becho support; you can also sign in with it.">{user.userCode}</code>
-                <button type="button" onClick={copyCode} aria-label="Copy user code" className="icon-btn" style={{ width: 30, height: 30, color: copied ? 'var(--success)' : 'var(--text-muted)' }}>
-                  {copied ? <Check size={15} /> : <Copy size={15} />}
-                </button>
-                {copied && <span role="status" style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Copied</span>}
-              </>
-            )}
-          </div>
-        </div>
+    <section className="card card-pad profile-card" aria-labelledby="acc-profile-title">
+      <div className="pc-avatar">
+        <Avatar name={user.displayName} size="lg" />
+        {verifiedAccount && (
+          <span className="pc-check" title="Verified account"><Check size={12} strokeWidth={3} /></span>
+        )}
       </div>
+      {!editingName && (
+        <div className="pc-name">
+          <h2 id="acc-profile-title">{user.displayName}</h2>
+          <button type="button" onClick={() => { setEditingName(true); setNameMsg(null); }} className="icon-btn" aria-label="Edit name" title="Edit name" style={{ width: 30, height: 30, color: 'var(--text-muted)' }}>
+            <Pencil size={15} />
+          </button>
+        </div>
+      )}
+      {editingName && <h2 id="acc-profile-title" className="sr-only">Profile</h2>}
+      {user.userCode && (
+        <div className="pc-code">
+          <code title="Your user code. Share it with Becho support; you can also sign in with it.">{user.userCode}</code>
+          <button type="button" onClick={copyCode} aria-label="Copy user code" className="icon-btn" style={{ width: 28, height: 28, color: copied ? 'var(--success)' : 'var(--text-muted)' }}>
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+          {copied && <span role="status" style={{ fontSize: '0.75rem', color: 'var(--success)' }}>Copied</span>}
+        </div>
+      )}
+      <div className="pc-chips">
+        {user.emailVerifiedAt && <span className="ok-pill"><BadgeCheck size={13} /> Email verified</span>}
+        {user.phoneVerifiedAt && <span className="ok-pill"><BadgeCheck size={13} /> Mobile verified</span>}
+        {!verifiedAccount && <Link to="/verify" className="chip chip-warning">Verify your account</Link>}
+        {roleLabel !== 'Member' && <Chip tone="primary" upper>{roleLabel}</Chip>}
+      </div>
+      {user.createdAt && (
+        <div className="pc-facts">
+          <span className="muted">Member since</span>
+          <span>{new Date(user.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+        </div>
+      )}
 
       {editingName && (
         <form onSubmit={saveName} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '14px' }}>
@@ -154,41 +151,8 @@ const ProfileSection: React.FC<{ user: UserProfile }> = ({ user }) => {
       )}
       {nameMsg && <Alert tone={nameMsg.tone} style={{ marginTop: '10px' }}>{nameMsg.text}</Alert>}
 
-      <div className="trust-box">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-          <span className="overline" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>Identity &amp; trust</span>
-          {allSet ? <Chip tone="success"><ShieldCheck size={12} /> All set</Chip> : <Chip tone="warning">Action needed</Chip>}
-        </div>
-        <div className="trust-row">
-          <Mail size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          <span className="tr-text" title={user.email ?? undefined}>{user.email ?? 'No email'}</span>
-          {user.email && <TrustChip ok={!!user.emailVerifiedAt} badLabel="Not verified" />}
-        </div>
-        <div className="trust-row">
-          <Smartphone size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          <span className="tr-text">{user.phone ? formatIndianMobile(user.phone) : 'Mobile number'}</span>
-          {user.phone
-            ? <TrustChip ok={!!user.phoneVerifiedAt} badLabel="On file" badTone="neutral" />
-            : <Chip tone="danger">Not added</Chip>}
-        </div>
-        <div className="trust-row">
-          <ShieldCheck size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-          <span className="tr-text">Account verification</span>
-          {verifiedAccount ? <TrustChip ok badLabel="" /> : <Link to="/verify" className="chip chip-warning">Verify now</Link>}
-        </div>
-        {user.createdAt && (
-          <div className="trust-row">
-            <CalendarDays size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
-            <span className="tr-text">Member since {new Date(user.createdAt).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
-          </div>
-        )}
-        {user.phone && !user.phoneVerifiedAt && (
-          <div className="muted" style={{ fontSize: '0.74rem', marginTop: '2px' }}>To change your mobile number, contact support.</div>
-        )}
-      </div>
-
       {!user.phone && (
-        <form onSubmit={saveMobile} noValidate className="remark-box warn" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '12px' }}>
+        <form id="add-mobile" onSubmit={saveMobile} noValidate className="remark-box warn" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '12px', textAlign: 'left' }}>
           <TextField
             id="acc-mobile" label="Add your mobile number" type="tel" inputMode="numeric" autoComplete="tel-national" prefix="+91" maxLength={16}
             value={mobile} error={mobileError} placeholder="98765 43210"
@@ -302,6 +266,7 @@ export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
   const [listings, setListings] = useState<MyListingItem[]>([]);
   const [loadingListings, setLoadingListings] = useState(true);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [saved, setSaved] = useState<ListingCardData[]>([]);
   const [showPassword, setShowPassword] = useState(false);
 
   // Pick up changes made elsewhere (another tab, staff edits).
@@ -313,9 +278,14 @@ export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
       .finally(() => setLoadingListings(false));
   }, []);
   useEffect(() => { loadListings(); }, [loadListings]);
-  useEffect(() => {
-    fetchApi<unknown[]>('/favorites').then((res) => { if (res.success && res.data) setSavedCount(res.data.length); });
+  const loadSaved = useCallback(() => {
+    fetchApi<ListingCardData[]>('/favorites').then((res) => { if (res.success && res.data) { setSaved(res.data); setSavedCount(res.data.length); } });
   }, []);
+  useEffect(() => { loadSaved(); }, [loadSaved]);
+  const toggleFavorite = async (id: string) => {
+    await fetchApi(`/favorites/${id}`, { method: 'POST' });
+    loadSaved();
+  };
 
   // /my-listings opens this page at the listings section.
   useEffect(() => {
@@ -330,79 +300,100 @@ export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
 
   if (!user) return null;
 
-  const live = listings.filter((l) => l.status === 'LIVE' || l.status === 'RESERVED').length;
-  const sold = listings.filter((l) => l.status === 'SOLD');
-  const soldValue = sold.reduce((sum, l) => sum + Number(l.price), 0);
+  const activeCount = listings.filter((l) => l.status === 'LIVE').length;
+  const reservedCount = listings.filter((l) => l.status === 'RESERVED').length;
+  const soldCount = listings.filter((l) => l.status === 'SOLD').length;
+  const stat = (n: number) => (loadingListings ? '–' : n);
+
+  const menu = (
+    <nav className="card acct-menu" aria-label="Account">
+      <Link to="/my-listings" className={`am-item${section === 'listings' ? ' on' : ''}`} onClick={() => document.getElementById('my-listings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+        <List size={18} /> <span>My listings</span> {!loadingListings && <span className="am-count primary">{listings.length}</span>}
+      </Link>
+      <Link to="/favorites" className="am-item"><Heart size={18} /> <span>Saved ads</span> {savedCount !== null && savedCount > 0 && <span className="am-count">{savedCount}</span>}</Link>
+      <Link to="/chat" className="am-item"><MessageSquare size={18} /> <span>Messages</span></Link>
+      <div className="am-item static">
+        <Bell size={18} />
+        <span style={{ minWidth: 0 }}>
+          Notification preferences
+          <span className="muted am-sub">
+            {desktopAlerts === 'granted' ? 'Desktop alerts are on'
+              : desktopAlerts === 'denied' ? 'Desktop alerts blocked in browser settings'
+                : desktopAlerts === 'unsupported' ? 'Desktop alerts not supported here'
+                  : 'Desktop alerts for messages and offers'}
+          </span>
+        </span>
+        {desktopAlerts === 'default' && <button type="button" className="btn btn-soft btn-sm" onClick={() => void enableDesktopAlerts()}>Turn on</button>}
+        {desktopAlerts === 'granted' && <Chip tone="success">On</Chip>}
+      </div>
+      <button type="button" className="am-item" onClick={() => setShowPassword((v) => !v)} aria-expanded={showPassword} aria-controls="change-password">
+        <Lock size={18} /> <span>Security & password</span>
+        <ChevronRight size={16} className="muted" style={{ transform: showPassword ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }} />
+      </button>
+      <div className="am-item static">
+        <Palette size={18} /> <span>Theme</span> <ThemeSwitch />
+      </div>
+      <div className="am-phone">
+        <span className="overline">Primary phone</span>
+        {user.phone
+          ? <span className="am-phone-num">{formatIndianMobile(user.phone)} {user.phoneVerifiedAt ? <BadgeCheck size={14} color="var(--success)" aria-label="Verified" /> : <span className="muted" style={{ fontSize: '0.75rem' }}>(on file)</span>}</span>
+          : <a href="#add-mobile" className="link" style={{ fontSize: '0.88rem' }}>Add a mobile number</a>}
+      </div>
+      <button type="button" className="am-item danger" onClick={() => { logout(); navigate('/'); }}>
+        <LogOut size={18} /> <span>Log out</span>
+      </button>
+    </nav>
+  );
 
   return (
     <>
       <Navbar />
-      <main className="page">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '12px', marginBottom: '16px' }}>
-          <div>
-            <div className="overline">Account &amp; trust center</div>
-            <h1 className="page-title">My account</h1>
-          </div>
-          <ThemeSwitch />
-        </div>
+      <main className="page acct-v2">
+        <nav className="crumbs desktop-only" aria-label="Breadcrumb">
+          <Link to="/">Home</Link><span aria-hidden="true">/</span><span aria-current="page">My account & listings</span>
+        </nav>
 
-        <div className="acct-layout">
-          <div className="acct-side">
+        <div className="acct-layout v2">
+          <aside className="acct-side">
             <div className="acct-profile-block"><ProfileSection user={user} /></div>
-
-            <section className="acct-stats-block card" style={{ padding: '10px' }} aria-label="Your selling summary">
-              <div className="stats-row">
-                <div className="stat"><div className="stat-value">{loadingListings ? '–' : live}</div><div className="stat-label">Live ads</div></div>
-                <div className="stat"><div className="stat-value">{loadingListings ? '–' : sold.length}</div><div className="stat-label">Sold</div></div>
-                <div className="stat" title={soldValue ? `Total asking price of sold items: ${formatPrice(soldValue)}` : undefined}>
-                  <div className="stat-value">{loadingListings ? '–' : formatCompactINR(soldValue)}</div>
-                  <div className="stat-label">Total sold</div>
-                </div>
-              </div>
-            </section>
-
-            <section className="acct-support-block" aria-labelledby="acc-support-title">
-              <h2 id="acc-support-title" className="section-title" style={{ marginBottom: '10px' }}>Account &amp; support</h2>
-              <div className="card list-group">
-                <Link to="/favorites" className="list-item">
-                  <span className="li-icon"><Heart size={18} /></span>
-                  <span style={{ flex: 1 }}>Saved ads</span>
-                  {savedCount !== null && savedCount > 0 && <span className="chip chip-neutral">{savedCount}</span>}
-                  <ChevronRight size={18} color="var(--text-muted)" />
-                </Link>
-                <div className="list-item">
-                  <span className="li-icon"><Bell size={18} /></span>
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    Desktop alerts
-                    <span className="muted" style={{ display: 'block', fontSize: '0.76rem' }}>
-                      {desktopAlerts === 'granted' ? 'On — new messages and offers pop up even when Becho is in the background'
-                        : desktopAlerts === 'denied' ? 'Blocked in your browser settings'
-                          : desktopAlerts === 'unsupported' ? 'Not supported in this browser'
-                            : 'Get alerted about messages and offers'}
-                    </span>
-                  </span>
-                  {desktopAlerts === 'default' && <button type="button" className="btn btn-soft btn-sm" onClick={() => void enableDesktopAlerts()}>Turn on</button>}
-                  {desktopAlerts === 'granted' && <Chip tone="success">On</Chip>}
-                </div>
-                <button type="button" className="list-item" onClick={() => setShowPassword((v) => !v)} aria-expanded={showPassword} aria-controls="change-password">
-                  <span className="li-icon"><Lock size={18} /></span>
-                  <span style={{ flex: 1 }}>Change password</span>
-                  <ChevronRight size={18} color="var(--text-muted)" style={{ transform: showPassword ? 'rotate(90deg)' : undefined, transition: 'transform 0.15s' }} />
-                </button>
-                <button type="button" className="list-item danger" onClick={() => { logout(); navigate('/'); }}>
-                  <span className="li-icon"><LogOut size={18} /></span>
-                  <span style={{ flex: 1 }}>Sign out</span>
-                  <ChevronRight size={18} />
-                </button>
-              </div>
+            <div className="acct-menu-block">
+              {menu}
               {showPassword && <div style={{ marginTop: '12px' }}><PasswordSection /></div>}
-            </section>
-          </div>
+              <div className="acct-tip">
+                <Handshake size={18} />
+                <div>
+                  <strong>Deal hand-to-hand</strong>
+                  <span>Inspect items in person and in daylight before any money changes hands.</span>
+                </div>
+              </div>
+            </div>
+          </aside>
 
           <div className="acct-main">
+            <section className="card acct-stats" aria-label="Your selling summary">
+              <div className="st-tile"><span className="st-label">Active listings</span><span className="st-val">{stat(activeCount)} <small>ads live</small></span></div>
+              <div className="st-tile accent"><span className="st-label">Reserved deals</span><span className="st-val">{stat(reservedCount)} <small>pending</small></span></div>
+              <div className="st-tile"><span className="st-label">Items sold</span><span className="st-val">{stat(soldCount)} <small>total</small></span></div>
+              <Link to="/create-listing" className="btn-primary btn-lg st-post"><PlusCircle size={19} /> Post new ad</Link>
+            </section>
+
             <div className="acct-listings-block">
               <MyListingsPanel listings={listings} loading={loadingListings} reload={loadListings} notice={notice} />
             </div>
+
+            {saved.length > 0 && (
+              <section className="card saved-box" aria-labelledby="saved-title">
+                <div className="section-head" style={{ alignItems: 'center', marginBottom: 14 }}>
+                  <h2 id="saved-title" className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Heart size={20} fill="currentColor" color="var(--danger-fill)" /> Saved ads <span className="count-chip">{saved.length} item{saved.length === 1 ? '' : 's'}</span>
+                  </h2>
+                  <Link to="/favorites" className="link" style={{ fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}>View all saved <ArrowRight size={15} /></Link>
+                </div>
+                <div className="listing-grid saved-grid">
+                  {saved.slice(0, 3).map((item) => <ListingCard key={item.id} item={item} favorited onToggleFavorite={toggleFavorite} />)}
+                </div>
+              </section>
+            )}
           </div>
         </div>
       </main>

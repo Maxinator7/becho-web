@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Info, AlertTriangle, ShoppingBag } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
 import { PASSWORD_RULES } from '../utils/validation';
 
 /* Shared building blocks for the account forms (login, register, reset, account settings). */
@@ -67,20 +67,27 @@ export function describedBy(id: string, error?: string, hint?: boolean) {
   return { 'aria-invalid': error ? true : undefined, 'aria-describedby': ids || undefined } as const;
 }
 
-interface FieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'id'> {
+interface FieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'id' | 'prefix'> {
   id: string;
   label: string;
   error?: string;
   hint?: React.ReactNode;
   /** Fixed text shown inside the input on the left, e.g. "+91". */
-  prefix?: string;
+  prefix?: React.ReactNode;
+  /** Decorative icon inside the input on the left. */
+  icon?: React.ReactNode;
   inputRef?: React.Ref<HTMLInputElement>;
 }
 
-export const TextField: React.FC<FieldProps> = ({ id, label, error, hint, prefix, style, inputRef, ...rest }) => (
+export const TextField: React.FC<FieldProps> = ({ id, label, error, hint, prefix, icon, style, inputRef, ...rest }) => (
   <div>
     <label htmlFor={id} style={labelStyle}>{label}</label>
-    {prefix ? (
+    {icon && !prefix ? (
+      <div className="field-icon">
+        <span className="fi-icon" aria-hidden="true">{icon}</span>
+        <input ref={inputRef} id={id} {...describedBy(id, error, !!hint)} {...rest} style={{ ...inputStyle(!!error), paddingLeft: '2.6rem', ...style }} />
+      </div>
+    ) : prefix ? (
       <div className="price-input" style={{ borderRadius: '10px', borderColor: error ? 'var(--danger)' : undefined }}>
         <span aria-hidden="true" className="cur" style={{ fontSize: '0.95rem', fontWeight: 600, padding: '0 0.75rem' }}>
           {prefix}
@@ -96,13 +103,15 @@ export const TextField: React.FC<FieldProps> = ({ id, label, error, hint, prefix
 );
 
 interface PasswordFieldProps extends Omit<FieldProps, 'type' | 'prefix'> {
+  /** Show a green tick in the field (e.g. confirmation matches). */
+  success?: boolean;
   /** Extra content under the input (e.g. the rules checklist). */
   children?: React.ReactNode;
   labelAside?: React.ReactNode;
 }
 
 /** Password input with a show/hide toggle and a Caps Lock warning. */
-export const PasswordField: React.FC<PasswordFieldProps> = ({ id, label, error, hint, children, labelAside, onKeyUp, onKeyDown, onBlur, inputRef, ...rest }) => {
+export const PasswordField: React.FC<PasswordFieldProps> = ({ id, label, error, hint, children, labelAside, onKeyUp, onKeyDown, onBlur, inputRef, icon, success, ...rest }) => {
   const [visible, setVisible] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const checkCaps = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -114,7 +123,8 @@ export const PasswordField: React.FC<PasswordFieldProps> = ({ id, label, error, 
         <label htmlFor={id} style={labelStyle}>{label}</label>
         {labelAside}
       </div>
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative' }} className={icon ? 'field-icon' : undefined}>
+        {icon && <span className="fi-icon" aria-hidden="true">{icon}</span>}
         <input
           ref={inputRef}
           id={id}
@@ -124,8 +134,9 @@ export const PasswordField: React.FC<PasswordFieldProps> = ({ id, label, error, 
           onKeyUp={(e) => { checkCaps(e); onKeyUp?.(e); }}
           onKeyDown={(e) => { checkCaps(e); onKeyDown?.(e); }}
           onBlur={(e) => { setCapsLock(false); onBlur?.(e); }}
-          style={{ ...inputStyle(!!error), paddingRight: '2.75rem' }}
+          style={{ ...inputStyle(!!error), paddingRight: success ? '4.6rem' : '2.75rem', ...(icon ? { paddingLeft: '2.6rem' } : {}) }}
         />
+        {success && <CheckCircle2 size={19} className="fi-ok" aria-label="Passwords match" />}
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
@@ -164,25 +175,72 @@ export const PasswordChecklist: React.FC<{ password: string; id?: string }> = ({
   </ul>
 );
 
-/** Centered card used by the sign-in / sign-up / reset pages. */
-export const AuthCard: React.FC<{ title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; maxWidth?: number; icon?: React.ReactNode; overline?: string }> = ({ title, subtitle, children, footer, maxWidth = 440, icon, overline }) => (
+/** Sign-in / sign-up / reset layout: heading above, the form in a card, extra cards below. */
+export const AuthCard: React.FC<{
+  title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode; maxWidth?: number;
+  icon?: React.ReactNode; overline?: string; top?: React.ReactNode; after?: React.ReactNode;
+}> = ({ title, subtitle, children, footer, maxWidth = 440, icon, overline, top, after }) => (
   <main className="auth-wrap" style={{ maxWidth: `${maxWidth}px` }}>
-    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+    <div className="auth-brand">
       <Link to="/" className="brand" aria-label="Becho home">
-        <span className="brand-mark" aria-hidden="true" style={{ display: 'inline-flex' }}><ShoppingBag size={17} strokeWidth={2.4} /></span>
-        Becho
+        <span className="brand-mark" aria-hidden="true">B</span>
+        <span className="brand-text">
+          <span className="brand-name">Becho</span>
+          <span className="brand-tag">Buy & Sell Locally</span>
+        </span>
       </Link>
     </div>
-    <div className="card auth-card">
+    {top}
+    <header className="auth-head">
       {icon && <div className="auth-icon" aria-hidden="true">{icon}</div>}
-      {overline && <div className="overline" style={{ textAlign: 'center', marginBottom: '0.35rem' }}>{overline}</div>}
-      <h1 className="page-title" style={{ textAlign: 'center', marginBottom: subtitle ? '0.4rem' : '1.5rem' }}>{title}</h1>
-      {subtitle && <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{subtitle}</p>}
-      {children}
-      {footer && <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.9rem' }}>{footer}</div>}
-    </div>
+      {overline && <div className="auth-pill"><span className="dot" aria-hidden="true" /> {overline}</div>}
+      <h1 className="page-title auth-title">{title}</h1>
+      {subtitle && <p className="auth-sub">{subtitle}</p>}
+    </header>
+    <div className="card auth-card">{children}</div>
+    {footer && <div className="auth-foot">{footer}</div>}
+    {after}
   </main>
 );
+
+/** Two-or-more step indicator ("Identity → Reset"). */
+export const Stepper: React.FC<{ steps: string[]; current: number }> = ({ steps, current }) => (
+  <ol className="stepper" aria-label={`Step ${current + 1} of ${steps.length}`}>
+    {steps.map((label, i) => (
+      <li key={label} className={i < current ? 'done' : i === current ? 'on' : ''} aria-current={i === current ? 'step' : undefined}>
+        <span className="st-dot">{i < current ? <CheckCircle2 size={14} /> : i + 1}</span>
+        <span className="st-label">{label}</span>
+      </li>
+    ))}
+  </ol>
+);
+
+/** Password strength bar: rules met, plus length and character variety. */
+export function passwordStrength(p: string): { score: 0 | 1 | 2 | 3 | 4; label: string } {
+  if (!p) return { score: 0, label: '' };
+  const rules = PASSWORD_RULES.filter((r) => r.test(p)).length;
+  if (rules < PASSWORD_RULES.length) return { score: 1, label: 'Too weak' };
+  let score = 2;
+  if (p.length >= 12) score++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p) && /[^A-Za-z0-9]/.test(p)) score++;
+  const s = Math.min(4, score) as 2 | 3 | 4;
+  return { score: s, label: s === 2 ? 'Fair' : s === 3 ? 'Good' : 'Strong' };
+}
+
+export const PasswordStrength: React.FC<{ password: string; children?: React.ReactNode }> = ({ password, children }) => {
+  const { score, label } = passwordStrength(password);
+  return (
+    <div className="pw-strength" aria-live="polite">
+      <div className="pw-head">
+        <span className="pw-title">Security strength</span>
+        {password && <span className={`pw-tag s${score}`}>{label}</span>}
+      </div>
+      <div className={`pw-bars s${score}`} aria-hidden="true"><span /><span /><span /><span /></div>
+      {children}
+      {!password && <span className="pw-label">Tip: 12+ characters with upper and lower case, numbers and a symbol is strongest.</span>}
+    </div>
+  );
+};
 
 /** Small dev/staging banner with the code (only when the API exposes it). */
 export const DevOtpNotice: React.FC<{ code?: string }> = ({ code }) =>
@@ -215,37 +273,47 @@ export const OtpField: React.FC<{
   error?: string;
   autoFocus?: boolean;
   onComplete?: (code: string) => void;
-}> = ({ id, label, value, onChange, error, autoFocus, onComplete }) => (
-  <div>
-    <label htmlFor={id} style={labelStyle}>{label}</label>
-    <input
-      id={id}
-      type="text"
-      inputMode="numeric"
-      autoComplete="one-time-code"
-      pattern="[0-9]*"
-      maxLength={6}
-      autoFocus={autoFocus}
-      value={value}
-      placeholder="••••••"
-      {...describedBy(id, error)}
-      onChange={(e) => {
-        const code = e.target.value.replace(/\D/g, '').slice(0, 6);
-        onChange(code);
-        if (code.length === 6) onComplete?.(code);
-      }}
-      onPaste={(e) => {
-        // Accept "123 456" or "Your code is 123456" pasted from an email.
-        const digits = e.clipboardData.getData('text').replace(/\D/g, '');
-        if (digits.length >= 6) {
-          e.preventDefault();
-          const code = digits.slice(0, 6);
-          onChange(code);
-          onComplete?.(code);
-        }
-      }}
-      style={{ ...inputStyle(!!error), textAlign: 'center', fontSize: '1.4rem', letterSpacing: '0.5em', fontVariantNumeric: 'tabular-nums', paddingLeft: '1.25rem' }}
-    />
-    <FieldError id={`${id}-error`} message={error} />
-  </div>
-);
+}> = ({ id, label, value, onChange, error, autoFocus, onComplete }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div>
+      <label htmlFor={id} style={labelStyle}>{label}</label>
+      {/* One real input (paste, autofill, screen readers) drawn as six boxes. */}
+      <div className={`otp-boxes${error ? ' invalid' : ''}${focused ? ' focused' : ''}`}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <span key={i} className={`otp-box${value[i] ? ' filled' : ''}${focused && i === Math.min(value.length, 5) ? ' caret' : ''}`} aria-hidden="true">{value[i] ?? ''}</span>
+        ))}
+        <input
+          id={id}
+          className="otp-input"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]*"
+          maxLength={6}
+          autoFocus={autoFocus}
+          value={value}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          {...describedBy(id, error)}
+          onChange={(e) => {
+            const code = e.target.value.replace(/\D/g, '').slice(0, 6);
+            onChange(code);
+            if (code.length === 6) onComplete?.(code);
+          }}
+          onPaste={(e) => {
+            // Accept "123 456" or "Your code is 123456" pasted from an email.
+            const digits = e.clipboardData.getData('text').replace(/\D/g, '');
+            if (digits.length >= 6) {
+              e.preventDefault();
+              const code = digits.slice(0, 6);
+              onChange(code);
+              onComplete?.(code);
+            }
+          }}
+        />
+      </div>
+      <FieldError id={`${id}-error`} message={error} />
+    </div>
+  );
+};

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { fetchApi, AuthTokens } from '../../api/client';
 import { useAuth, UserProfile } from '../../context/AuthContext';
-import { ShieldCheck } from 'lucide-react';
+import { ArrowRight, Clock, HelpCircle, Mail, ShieldCheck } from 'lucide-react';
 import { Alert, AuthCard, DevOtpNotice, OtpField, useCountdown } from '../../components/FormControls';
 import { validateOtp } from '../../utils/validation';
 import { OtpInfo, clearOtpInfo, cooldownLeft, loadOtpInfo, saveOtpInfo } from './otpInfo';
@@ -80,10 +80,19 @@ export const VerifyAccount: React.FC = () => {
 
   return (
     <AuthCard
-      icon={<ShieldCheck size={24} />}
-      overline="One last step"
-      title="Verify your account"
-      subtitle={<>We emailed a 6-digit code to <strong style={{ color: 'var(--text-primary)' }}>{destination}</strong>. It expires in 15 minutes.</>}
+      icon={<span className="otp-icon"><Mail size={26} /><span className="otp-badge"><ShieldCheck size={13} /></span></span>}
+      title="Verify your email address"
+      subtitle={<>We have sent a 6-digit verification code to <strong style={{ color: 'var(--text-primary)', display: 'block' }}>{destination}</strong></>}
+      after={
+        <div className="auth-info">
+          <span className="ai-icon"><HelpCircle size={18} /></span>
+          <div>
+            <div className="ai-title">Didn’t receive the email?</div>
+            <div className="ai-text">Check your spam or junk folder, and make sure your mailbox isn’t full. The code expires in 15 minutes.</div>
+            {cooldown.left <= 0 && <button type="button" className="link" style={{ fontSize: '0.84rem', marginTop: 4 }} onClick={handleResend} disabled={sending}>{sending ? 'Sending…' : 'Resend the code'}</button>}
+          </div>
+        </div>
+      }
     >
       <DevOtpNotice code={info?.devOtp} />
       {notice && <Alert tone="success" style={{ marginBottom: '1rem' }}>{notice}</Alert>}
@@ -94,22 +103,18 @@ export const VerifyAccount: React.FC = () => {
           id="verify-code" label="Verification code" value={code} autoFocus error={codeError}
           onChange={(c) => { setCode(c); if (codeError) setCodeError(undefined); }}
         />
-        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
-          {loading ? 'Verifying…' : 'Verify'}
+        <div className="resend-row">
+          {cooldown.left > 0 ? (
+            <span aria-live="polite" className="resend-pill"><Clock size={14} /> Resend code in <strong>{Math.floor(cooldown.left / 60)}:{String(cooldown.left % 60).padStart(2, '0')}</strong></span>
+          ) : (
+            <button type="button" onClick={handleResend} disabled={sending} className="link">{sending ? 'Sending…' : 'Resend code'}</button>
+          )}
+        </div>
+        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary btn-cta" style={{ width: '100%', minHeight: '52px', opacity: loading ? 0.7 : 1 }}>
+          {loading ? 'Verifying…' : <>Verify &amp; continue <ArrowRight size={19} /></>}
         </button>
       </form>
 
-      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '1.25rem', fontSize: '0.9rem' }}>
-        Didn't get it? Check your spam folder, or{' '}
-        {cooldown.left > 0 ? (
-          <span aria-live="polite">send a new code in {cooldown.left}s</span>
-        ) : (
-          <button type="button" onClick={handleResend} disabled={sending} style={{ color: 'var(--primary-text)', fontWeight: 600, padding: 0 }}>
-            {sending ? 'sending…' : 'send a new code'}
-          </button>
-        )}
-        .
-      </p>
     </AuthCard>
   );
 };

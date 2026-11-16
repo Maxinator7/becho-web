@@ -61,6 +61,30 @@ export const categoryIcon = (slug?: string) => (slug && CATEGORY_ICONS[slug]) ||
 /** Short label for a category tile ("Electronics & Appliances" → "Electronics"). */
 export const shortCategoryName = (name: string) => name.split(/\s*&\s*|,\s*/)[0];
 
+/* ───────────── categories ───────────── */
+
+export interface CategoryNode { id: string; name: string; slug: string; parentId?: string | null; children?: CategoryNode[] }
+
+let categoryCache: Promise<CategoryNode[]> | null = null;
+
+/** Top-level categories with their subcategories (fetched once per page load). */
+export function useCategories() {
+  const [cats, setCats] = useState<CategoryNode[]>([]);
+  useEffect(() => {
+    if (!categoryCache) {
+      categoryCache = fetchApi<CategoryNode[]>('/categories').then((res) => {
+        if (res.success && res.data) return res.data;
+        categoryCache = null;
+        return [];
+      });
+    }
+    let live = true;
+    categoryCache.then((c) => { if (live) setCats(c); });
+    return () => { live = false; };
+  }, []);
+  return cats;
+}
+
 /* ───────────── favourites ───────────── */
 
 /**
@@ -127,8 +151,7 @@ export const ListingCard: React.FC<{
             <Tag size={28} />
           </div>
         )}
-        <span className="tl chip chip-photo chip-square">{CONDITION_LABELS[item.condition] ?? item.condition}</span>
-        {item.verifiedAt && <span className="tr"><VerifiedChip onPhoto /></span>}
+        <span className="bl cond-tag">{CONDITION_LABELS[item.condition] ?? item.condition}</span>
         {onToggleFavorite && (
           <button
             type="button"
@@ -143,9 +166,10 @@ export const ListingCard: React.FC<{
         )}
       </div>
       <div className="lcard-body">
-        <div className="price lcard-price">{formatPrice(Number(item.price))}</div>
+        {item.verifiedAt && <span className="vchip"><BadgeCheck size={13} /> Verified by Becho</span>}
         <div className="lcard-title" title={item.title}>{item.title}</div>
         {item.category?.name && <div className="lcard-sub">{item.category.name}</div>}
+        <div className="price lcard-price">{formatPrice(Number(item.price))}</div>
         <div className="lcard-meta">
           <span><MapPin size={12} style={{ flexShrink: 0 }} /> {city}</span>
           {item.createdAt && <span style={{ flexShrink: 0 }}>{timeAgo(item.createdAt)}</span>}
@@ -154,6 +178,11 @@ export const ListingCard: React.FC<{
     </Link>
   );
 };
+
+/** "Verified by Becho" chip for staff-verified listings. */
+export const VerifiedByBecho: React.FC<{ small?: boolean }> = ({ small }) => (
+  <span className={`vchip${small ? ' sm' : ''}`} title="Checked by the Becho team"><BadgeCheck size={small ? 12 : 13} /> Verified by Becho</span>
+);
 
 /* ───────────── modal / bottom sheet ───────────── */
 

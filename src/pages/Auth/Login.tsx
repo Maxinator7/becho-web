@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate, Link, useLocation as useRouterLocation } from 'react-router-dom';
 import { fetchApi, AuthTokens } from '../../api/client';
 import { useAuth, UserProfile } from '../../context/AuthContext';
-import { LogIn } from 'lucide-react';
+import { ArrowRight, AtSign, Lock, ShieldCheck } from 'lucide-react';
 import { Alert, AuthCard, PasswordField, TextField, linkStyle } from '../../components/FormControls';
 import { FieldErrors, fieldErrorsFrom, focusFirstError, hasErrors, validateIdentifier } from '../../utils/validation';
 
@@ -98,10 +98,19 @@ export const Login: React.FC = () => {
 
   return (
     <AuthCard
-      overline="Sign in"
-      title="Welcome back"
-      subtitle="Sign in to buy, sell and chat with people near you."
-      footer={<>Don't have an account? <Link to="/register" style={linkStyle}>Create one</Link></>}
+      overline="India’s local marketplace"
+      title="Welcome back to Becho"
+      subtitle="Buy and sell safely with verified local community members."
+      footer={<>Don't have an account? <Link to="/register" style={linkStyle}>Sign up</Link></>}
+      after={
+        <div className="auth-info">
+          <span className="ai-icon"><ShieldCheck size={18} /></span>
+          <div>
+            <div className="ai-title">Safe &amp; authentic</div>
+            <div className="ai-text">Every Becho account confirms its email with a one-time code, and listings are checked by our team before they go live.</div>
+          </div>
+        </div>
+      }
     >
       {state.notice && !formError && <Alert tone="success" style={{ marginBottom: '1rem' }}>{state.notice}</Alert>}
       {formError && (
@@ -132,6 +141,7 @@ export const Login: React.FC = () => {
           placeholder="you@example.com, 98765 43210 or BCH-XXXXXX"
           error={errors.identifier}
           required
+          icon={<AtSign size={18} />}
         />
 
         <PasswordField
@@ -145,6 +155,8 @@ export const Login: React.FC = () => {
           error={errors.password}
           required
           inputRef={passwordRef}
+          icon={<Lock size={18} />}
+          placeholder="Enter your password"
           labelAside={
             <Link to="/forgot-password" state={{ identifier: identifier.trim() }} style={{ ...linkStyle, fontSize: '0.82rem' }}>
               Forgot password?
@@ -156,11 +168,10 @@ export const Login: React.FC = () => {
           type="submit"
           disabled={loading}
           aria-busy={loading}
-          className="btn-primary"
-          style={{ width: '100%', minHeight: '48px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1, cursor: loading ? 'wait' : 'pointer' }}
+          className="btn-primary btn-cta"
+          style={{ width: '100%', minHeight: '52px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1, cursor: loading ? 'wait' : 'pointer' }}
         >
-          <LogIn size={18} />
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? 'Signing in…' : <>Sign in <ArrowRight size={19} /></>}
         </button>
       </form>
     </AuthCard>

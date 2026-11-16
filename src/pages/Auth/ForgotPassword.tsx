@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { CheckCircle2, KeyRound, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, KeyRound, ArrowLeft, ArrowRight, AtSign, Lock, LogOut, RotateCcw } from 'lucide-react';
 import {
-  Alert, AuthCard, DevOtpNotice, OtpField, PasswordChecklist, PasswordField, TextField, linkStyle, useCountdown,
+  Alert, AuthCard, DevOtpNotice, OtpField, PasswordChecklist, PasswordField, PasswordStrength, Stepper, TextField, linkStyle, useCountdown,
 } from '../../components/FormControls';
 import {
   FieldErrors, fieldErrorsFrom, focusFirstError, hasErrors, validateConfirm, validateIdentifier, validateOtp, validatePassword,
@@ -155,9 +155,9 @@ export const ForgotPassword: React.FC = () => {
 
   return (
     <AuthCard
-      icon={<KeyRound size={24} />}
-      overline={step === 'request' ? 'Step 1 of 2' : 'Step 2 of 2'}
-      title="Reset your password"
+      top={<Stepper steps={['Identity', 'Reset']} current={step === 'request' ? 0 : 1} />}
+      icon={step === 'request' ? <KeyRound size={24} /> : undefined}
+      title={step === 'request' ? 'Reset your password' : 'Set a new password'}
       subtitle={step === 'request'
         ? 'Enter the email, mobile number or user code on your account. We’ll email you a code to set a new password.'
         : undefined}
@@ -174,10 +174,10 @@ export const ForgotPassword: React.FC = () => {
             onChange={(e) => { setIdentifier(e.target.value); if (identifierError) setIdentifierError(validateIdentifier(e.target.value)); }}
             onBlur={() => setIdentifierError(validateIdentifier(identifier))}
             placeholder="you@example.com, 98765 43210 or BCH-XXXXXX"
-            error={identifierError}
+            error={identifierError} icon={<AtSign size={18} />}
           />
-          <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
-            {loading ? 'Sending code…' : 'Send code'}
+          <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary btn-cta" style={{ width: '100%', minHeight: '52px', opacity: loading ? 0.7 : 1 }}>
+            {loading ? 'Sending code…' : <>Send code <ArrowRight size={19} /></>}
           </button>
         </form>
       ) : (
@@ -193,17 +193,21 @@ export const ForgotPassword: React.FC = () => {
             <PasswordField
               id="fp-password" label="New password" name="new-password" autoComplete="new-password" required maxLength={128}
               value={values.password} onChange={(e) => setField('password', e.target.value)} onBlur={() => blurField('password')}
-              error={errors.password}
+              error={errors.password} icon={<Lock size={18} />}
             >
-              <PasswordChecklist password={values.password} />
+              <PasswordStrength password={values.password}>
+                <PasswordChecklist password={values.password} />
+              </PasswordStrength>
             </PasswordField>
             <PasswordField
               id="fp-confirm" label="Confirm new password" name="confirm-password" autoComplete="new-password" required maxLength={128}
               value={values.confirm} onChange={(e) => setField('confirm', e.target.value)} onBlur={() => blurField('confirm')}
-              error={errors.confirm}
+              error={errors.confirm} icon={<RotateCcw size={18} />}
+              success={!!values.confirm && values.confirm === values.password && !validatePassword(values.password)}
             />
-            <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary" style={{ width: '100%', minHeight: '48px', opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Updating…' : 'Set new password'}
+            <div className="info-line"><LogOut size={15} /> For your security, resetting your password signs you out on all devices.</div>
+            <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary btn-cta" style={{ width: '100%', minHeight: '52px', opacity: loading ? 0.7 : 1 }}>
+              {loading ? 'Updating…' : <>Set new password <ArrowRight size={19} /></>}
             </button>
           </form>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>

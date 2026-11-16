@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Lock, LockKeyhole, Mail, ShieldCheck, UserRound } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, KeyRound, Lock, Mail, Store } from 'lucide-react';
 import { AuthTokens, fetchApi } from '../api/client';
 import { UserProfile, useAuth } from '../context/AuthContext';
 import { Button } from './ui';
-import { AdminThemeToggle, BrandMark } from './chrome';
+import { AdminThemeToggle } from './chrome';
 
 export const STAFF_ROLES = ['ADMIN', 'MODERATOR'];
 
@@ -54,7 +54,7 @@ const PasswordInput: React.FC<{ id: string; value: string; onChange: (v: string)
         onBlur={onBlur}
         aria-invalid={invalid}
         aria-describedby={describedBy}
-        className="a-input"
+        className="a-input a-input--soft"
         style={{ height: 44 }}
       />
       <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'} title={show ? 'Hide password' : 'Show password'}>
@@ -66,41 +66,18 @@ const PasswordInput: React.FC<{ id: string; value: string; onChange: (v: string)
 
 const Shell: React.FC<{ title: string; subtitle: string; children: React.ReactNode }> = ({ title, subtitle, children }) => (
   <div className="a-login">
-    <header className="a-login__top">
-      <div className="a-brand">
-        <BrandMark />
-        <div>
-          <div className="a-brand__name">Becho</div>
-          <div className="a-brand__sub">Admin operations</div>
-        </div>
-      </div>
-      <AdminThemeToggle />
-    </header>
+    <div className="a-login__theme"><AdminThemeToggle /></div>
     <main className="a-login__main">
-      <div className="a-login__card">
-        <div className="a-login__body">
-          <div className="a-login__head">
-            <span className="a-login__icon" aria-hidden><LockKeyhole size={22} /></span>
-            <div>
-              <h1 className="a-login__title">{title}</h1>
-              <div className="a-login__sub">{subtitle}</div>
-            </div>
-          </div>
-          {children}
-        </div>
-        <div className="a-login__notice">
-          <ShieldCheck size={16} style={{ flexShrink: 0, marginTop: 2, color: 'var(--a-primary-text)' }} />
-          <p>
-            <strong>Restricted staff console.</strong> Only Becho admins and moderators can sign in here. Moderation and account actions you take are
-            recorded with your name. Buyers and sellers should use the Becho marketplace.
-          </p>
-        </div>
+      <div className="a-login__mark">
+        <span className="a-login__logo" aria-hidden><Store size={20} /></span>
+        <span className="a-login__word">becho<span className="a-login__dot">.</span></span>
+        <span className="a-login__badge">Admin portal</span>
       </div>
+      <h1 className="a-login__title">{title}</h1>
+      <p className="a-login__sub">{subtitle}</p>
+      <div className="a-login__card">{children}</div>
+      <p className="a-login__foot">Internal staff access only · Becho Classifieds India</p>
     </main>
-    <footer className="a-login__foot">
-      <span>Authorised Becho staff only</span>
-      <span>© {new Date().getFullYear()} Becho</span>
-    </footer>
   </div>
 );
 
@@ -156,14 +133,14 @@ const SignIn: React.FC<{ onForgot: (identifier: string) => void; notice: string 
   };
 
   return (
-    <Shell title="Staff sign in" subtitle="Becho trust & safety console">
+    <Shell title="Staff Sign-in" subtitle="Access listings management and regional controls">
       {notice && <Alert tone="success">{notice}</Alert>}
       {error && <Alert tone="danger">{error}</Alert>}
       <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={field}>
-          <label htmlFor="login-id" className="a-label">Email, mobile or user code</label>
+          <label htmlFor="login-id" className="a-label">Staff email, mobile or user code</label>
           <div className="a-input-wrap">
-            <UserRound size={16} />
+            <Mail size={16} />
             <input
               id="login-id"
               type="text"
@@ -175,8 +152,8 @@ const SignIn: React.FC<{ onForgot: (identifier: string) => void; notice: string 
               onBlur={() => identifier.trim() && setTouched((t) => ({ ...t, id: true }))}
               aria-invalid={!!(touched.id && idError)}
               aria-describedby="login-id-err"
-              placeholder="you@becho.in, +91 mobile or BCH-XXXXXX"
-              className="a-input" style={{ height: 44 }}
+              placeholder="staff@becho.in"
+              className="a-input a-input--soft" style={{ height: 44 }}
             />
           </div>
           <FieldError id="login-id-err" msg={touched.id ? idError : null} />
@@ -184,7 +161,7 @@ const SignIn: React.FC<{ onForgot: (identifier: string) => void; notice: string 
         <div style={field}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
             <label htmlFor="login-pw" className="a-label">Password</label>
-            <button type="button" className="a-link" style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }} onClick={() => onForgot(identifier.trim())}>
+            <button type="button" className="a-link" style={{ fontSize: 13, fontWeight: 600 }} onClick={() => onForgot(identifier.trim())}>
               Forgot password?
             </button>
           </div>
@@ -200,7 +177,7 @@ const SignIn: React.FC<{ onForgot: (identifier: string) => void; notice: string 
           <FieldError id="login-pw-err" msg={touched.pw ? pwError : null} />
         </div>
         <Button type="submit" variant="primary" large block loading={loading} style={{ marginTop: 4 }}>
-          {loading ? 'Signing in…' : <>Sign in to console <ArrowRight size={17} /></>}
+          {loading ? 'Signing in…' : <>Sign in to Admin Console <ArrowRight size={17} /></>}
         </Button>
       </form>
     </Shell>
@@ -274,7 +251,7 @@ const ForgotPassword: React.FC<{ initialIdentifier: string; onDone: (notice: str
 
   if (step === 'request') {
     return (
-      <Shell title="Reset your password" subtitle="We’ll email a one-time code to your staff account">
+      <Shell title="Reset password" subtitle="We’ll email a one-time code to your staff account">
         {error && <Alert tone="danger">{error}</Alert>}
         <p style={{ fontSize: 13.5, color: 'var(--a-text-2)', marginBottom: 18 }}>
           Enter the email, mobile number or user code of your staff account. We’ll email you a code to set a new password.
@@ -294,7 +271,7 @@ const ForgotPassword: React.FC<{ initialIdentifier: string; onDone: (notice: str
                 onBlur={() => setTouched((t) => ({ ...t, id: true }))}
                 aria-invalid={!!(touched.id && idError)}
                 aria-describedby="fp-id-err"
-                className="a-input" style={{ height: 44 }}
+                className="a-input a-input--soft" style={{ height: 44 }}
               />
             </div>
             <FieldError id="fp-id-err" msg={touched.id ? idError : null} />
@@ -339,7 +316,7 @@ const ForgotPassword: React.FC<{ initialIdentifier: string; onDone: (notice: str
               onBlur={() => setTouched((t) => ({ ...t, code: true }))}
               aria-invalid={!!(touched.code && codeError)}
               aria-describedby="fp-code-err"
-              className="a-input a-mono" style={{ height: 44, paddingLeft: 38, letterSpacing: '0.3em', fontSize: 16 }}
+              className="a-input a-input--soft a-mono" style={{ height: 44, paddingLeft: 38, letterSpacing: '0.3em', fontSize: 16 }}
             />
           </div>
           <FieldError id="fp-code-err" msg={touched.code ? codeError : null} />

@@ -2,13 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
-import { Avatar, Chip, Sheet } from '../../components/ui';
+import { Avatar, Chip, ListingCardData, Sheet, VerifiedByBecho, useCategories, useFavoriteIds } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useLocation } from '../../context/LocationContext';
-import { formatPrice, CONDITION_LABELS, LISTING_STATUS_LABELS, timeAgo } from '../../utils/format';
+import { formatPrice, CONDITION_LABELS, EDITABLE_LISTING_STATUSES, LISTING_STATUS_LABELS, timeAgo } from '../../utils/format';
 import {
-  Heart, MessageCircle, MapPin, Clock, ArrowLeft, Tag, Play, Share2, Image as ImageIcon, Video, BadgeCheck,
-  ChevronLeft, ChevronRight, Copy, Check, Hash, CalendarDays, Info,
+  Heart, MessageSquare, MapPin, Tag, Play, Share2, Image as ImageIcon, Video, BadgeCheck, ChevronLeft, ChevronRight,
+  Copy, Check, Info, Pencil, CheckCircle2, RotateCcw, Users, Search as SearchIcon, Handshake, ShieldCheck, Camera,
 } from 'lucide-react';
 
 interface ListingDetail {
@@ -24,7 +24,11 @@ interface ListingDetail {
   locationVisibility: string;
   createdAt: string;
   verifiedAt?: string | null;
-  seller: { id: string; displayName: string; createdAt: string; userCode?: string; status?: string };
+  seller: {
+    id: string; displayName: string; createdAt: string; userCode?: string; status?: string;
+    /** Only shown when the API includes them. */
+    emailVerifiedAt?: string | null; phoneVerifiedAt?: string | null;
+  };
   category: { id: string; name: string; slug: string };
   attributes: {
     id: string;
@@ -58,6 +62,18 @@ const OFFER_TONES: Record<string, 'warning' | 'success' | 'danger' | 'primary' |
 
 interface AttributeDefinitionWithOptions { id: string; options?: { value: string; label: string }[] }
 
+/** Suggested offers at about 95%, 97% and 99% of the asking price, rounded to a sensible step. */
+function quickOffers(price: number): number[] {
+  if (!Number.isFinite(price) || price <= 0) return [];
+  const step = price >= 50000 ? 500 : price >= 5000 ? 100 : price >= 500 ? 10 : 1;
+  const out: number[] = [];
+  for (const pct of [0.95, 0.97, 0.99]) {
+    const v = Math.max(step, Math.round((price * pct) / step) * step);
+    if (v < price && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -70,7 +86,14 @@ export const ProductDetails: React.FC = () => {
   const [listing, setListing] = useState<ListingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
-  const [isFavorited, setIsFavorited] = useState(false);
+  const { ids: favoriteIds, toggle: toggleFavorite } = useFavoriteIds();
+  const categories = useCategories();
+  const [moreFromSeller, setMoreFromSeller] = useState<{ items: ListingCardData[]; total: number }>({ items: [], total: 0 });
+  const [quickAmount, setQuickAmount] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickNote, setQuickNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [ownerBusy, setOwnerBusy] = useState(false);
+  const [ownerError, setOwnerError] = useState('');
   const [contacting, setContacting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -82,15 +105,22 @@ export const ProductDetails: React.FC = () => {
   const [offerError, setOfferError] = useState('');
   const [existingOffer, setExistingOffer] = useState<Offer | null>(null);
 
+  const loadListing = (listingId: string) => fetchApi<ListingDetail>(`/listings/${listingId}`);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    fetchApi<ListingDetail>(`/listings/${id}`).then((res) => {
+    setQuickNote(null);
+    loadListing(id).then((res) => {
       setLoading(false);
       if (res.success && res.data) {
         setListing(res.data);
         setActiveMediaIndex(0);
         setOfferAmount(String(Math.floor(res.data.price * 0.9)));
+        setQuickAmount(String(quickOffers(Number(res.data.price))[1] ?? ''));
+        fetchApi<{ listings: ListingCardData[]; pagination: { total: number } }>(`/listings?sellerId=${res.data.seller.id}&excludeId=${res.data.id}&limit=3`).then((more) => {
+          if (more.success && more.data) setMoreFromSeller({ items: more.data.listings ?? [], total: more.data.pagination?.total ?? 0 });
+        });
         // Select attributes are stored as option values ("royal-enfield"); show their labels.
         fetchApi<AttributeDefinitionWithOptions[]>(`/categories/${res.data.category.id}/attributes`).then((attrs) => {
           if (!attrs.success || !attrs.data) return;
@@ -116,11 +146,44 @@ export const ProductDetails: React.FC = () => {
     });
   }, [user, id]);
 
-  const handleToggleFavorite = async () => {
-    if (!user) { navigate('/login'); return; }
-    if (!id) return;
-    const res = await fetchApi<{ favorited: boolean }>(`/favorites/${id}`, { method: 'POST' });
-    if (res.success && res.data) setIsFavorited(res.data.favorited);
+  const handleToggleFavorite = () => { if (id) void toggleFavorite(id); };
+
+  /** Sends an offer straight from the quick-offer box (it appears in the chat with the seller). */
+  const sendQuickOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) { navigate('/login', { state: { from: `/listings/${id}` } }); return; }
+    if (!listing) return;
+    const amount = Number(quickAmount);
+    if (!Number.isFinite(amount) || amount <= 0) { setQuickNote({ ok: false, text: 'Enter a valid amount.' }); return; }
+    setQuickBusy(true);
+    setQuickNote(null);
+    const res = await fetchApi<Offer>('/offers', { method: 'POST', body: JSON.stringify({ listingId: listing.id, amount }) });
+    setQuickBusy(false);
+    if (res.success && res.data) {
+      setExistingOffer(res.data);
+      setQuickNote({ ok: true, text: `Offer of ${formatPrice(amount)} sent to ${listing.seller.displayName.split(' ')[0]}.` });
+    } else {
+      setQuickNote({ ok: false, text: res.error?.message || 'Could not send the offer.' });
+    }
+  };
+
+  /** Owner actions: mark sold (also "Confirm sale" when reserved) and reopen a reservation. */
+  const ownerAction = async (action: 'mark-sold' | 'mark-available') => {
+    if (!listing) return;
+    const question = action === 'mark-sold'
+      ? (listing.status === 'RESERVED' ? 'Confirm the sale? The listing will be marked as sold.' : 'Mark this item as sold? Open offers will be closed.')
+      : 'Reopen this listing? The reservation is cancelled and the item goes back on sale.';
+    if (!window.confirm(question)) return;
+    setOwnerBusy(true);
+    setOwnerError('');
+    const res = await fetchApi(`/listings/${listing.id}/${action}`, { method: 'POST' });
+    if (res.success) {
+      const fresh = await loadListing(listing.id);
+      if (fresh.success && fresh.data) setListing(fresh.data);
+    } else {
+      setOwnerError(res.error?.message || 'Could not update the listing.');
+    }
+    setOwnerBusy(false);
   };
 
   const handleContactSeller = async () => {
@@ -193,6 +256,7 @@ export const ProductDetails: React.FC = () => {
     } catch { /* clipboard blocked: the code is visible */ }
   };
 
+
   const shareButton = (
     <button type="button" className="icon-btn" onClick={handleShare} aria-label="Share listing" title={shareNote || 'Share'}>
       {shareNote ? <Check size={20} color="var(--success)" /> : <Share2 size={20} />}
@@ -222,9 +286,7 @@ export const ProductDetails: React.FC = () => {
     </>
   );
 
-  const images = listing.media && listing.media.length > 0
-    ? listing.media
-    : [];
+  const images = listing.media ?? [];
   const mediaCount = images.length;
   const activeIdx = Math.min(activeMediaIndex, Math.max(0, mediaCount - 1));
   const activeMedia = images[activeIdx];
@@ -232,9 +294,17 @@ export const ProductDetails: React.FC = () => {
   const videoIndex = images.findIndex((m) => m.mediaType === 'VIDEO');
 
   const isSeller = user?.id === listing.seller.id;
-  const cityName = areas.find((a) => a.cityCode === listing.cityCode)?.cityName ?? listing.cityCode;
-  const stateName = areas.find((a) => a.cityCode === listing.cityCode)?.stateName ?? listing.stateCode;
+  const area = areas.find((a) => a.cityCode === listing.cityCode);
+  const cityName = area?.cityName ?? listing.cityCode;
+  const stateName = area?.stateName ?? listing.stateCode;
   const sellerFirstName = listing.seller.displayName.split(' ')[0];
+  const isFavorited = favoriteIds.has(listing.id);
+  const price = Number(listing.price);
+  const suggestions = quickOffers(price);
+
+  const parentCat = categories.find((c) => c.id === listing.category?.id)
+    ? null
+    : categories.find((c) => c.children?.some((ch) => ch.id === listing.category?.id)) ?? null;
 
   const attrValue = (attr: ListingDetail['attributes'][number]) => {
     if (attr.valueText) {
@@ -247,67 +317,78 @@ export const ProductDetails: React.FC = () => {
     if (attr.valueBoolean !== undefined && attr.valueBoolean !== null) return attr.valueBoolean ? 'Yes' : 'No';
     return '—';
   };
-  const brand = listing.attributes?.find((a) => /brand|make/i.test(a.attributeDefinition.name));
-  const specs = (listing.attributes ?? []).filter((a) => a !== brand);
 
   const offerPending = existingOffer?.status === 'PENDING';
   const canOffer = !isSeller && listing.status === 'LIVE';
-  const favButton = (extra = '') => (
+  const openOfferSheet = () => { if (!user) { navigate('/login', { state: { from: `/listings/${listing.id}` } }); return; } setShowOfferModal(true); };
+  const editable = EDITABLE_LISTING_STATUSES.includes(listing.status);
+  const statusLine = listing.status === 'LIVE' ? null
+    : listing.status === 'RESERVED' ? (isSeller ? 'Reserved: you accepted an offer on this item' : 'Reserved: the seller has accepted an offer')
+    : listing.status === 'SOLD' ? 'This item has been sold'
+    : `Status: ${LISTING_STATUS_LABELS[listing.status]?.label ?? listing.status}`;
+
+  const favButton = (
     <button
       type="button"
       onClick={handleToggleFavorite}
-      className={`btn btn-outline ${extra}`}
+      className={`btn btn-soft fav-btn${isFavorited ? ' on' : ''}`}
       aria-pressed={isFavorited}
       aria-label={isFavorited ? 'Remove from saved' : 'Save'}
       title={isFavorited ? 'Remove from saved' : 'Save'}
-      style={{ width: 46, padding: 0, flexShrink: 0, color: isFavorited ? 'var(--danger-fill)' : 'var(--text-primary)' }}
     >
       <Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} />
     </button>
   );
 
+  const ownerActions = (compact: boolean) => (
+    <>
+      {editable && <Link to={`/listings/${listing.id}/edit`} className="btn btn-soft"><Pencil size={16} /> Edit listing</Link>}
+      {listing.status === 'LIVE' && (
+        <button type="button" className="btn-primary" disabled={ownerBusy} onClick={() => ownerAction('mark-sold')}><CheckCircle2 size={17} /> Mark as sold</button>
+      )}
+      {listing.status === 'RESERVED' && (
+        <>
+          <button type="button" className="btn btn-soft" disabled={ownerBusy} onClick={() => ownerAction('mark-available')}><RotateCcw size={16} /> Reopen{compact ? '' : ' listing'}</button>
+          <button type="button" className="btn btn-deal" disabled={ownerBusy} onClick={() => ownerAction('mark-sold')}><CheckCircle2 size={17} /> Confirm sale</button>
+        </>
+      )}
+      {!compact && <Link to="/my-listings" className="btn btn-ghost btn-sm">Manage in My listings</Link>}
+    </>
+  );
+
   return (
     <>
-      <Navbar title="Listing details" actions={shareButton} hideTabs />
+      <Navbar title="Listing details" actions={<>{shareButton}{!isSeller && <button type="button" className="icon-btn" onClick={handleToggleFavorite} aria-label={isFavorited ? 'Remove from saved' : 'Save'} aria-pressed={isFavorited} style={isFavorited ? { color: 'var(--danger-fill)' } : undefined}><Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} /></button>}</>} hideTabs />
 
       {showOfferModal && (
         <Sheet title={<><Tag size={20} color="var(--primary-text)" /> Make an offer</>} labelId="offer-title" onClose={() => { setShowOfferModal(false); setOfferError(''); }}>
           <p className="secondary" style={{ fontSize: '0.9rem', marginBottom: '16px' }}>
-            Listed at <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(listing.price)}</strong>. Your offer goes straight to {sellerFirstName} in the chat.
+            Listed at <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(price)}</strong>. Your offer goes straight to {sellerFirstName} in the chat.
           </p>
           <form onSubmit={handleSubmitOffer} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {suggestions.length > 0 && (
+              <div className="qo-chips" role="group" aria-label="Suggested offers">
+                {suggestions.map((v) => (
+                  <button key={v} type="button" className={`qo-chip${Number(offerAmount) === v ? ' on' : ''}`} aria-pressed={Number(offerAmount) === v} onClick={() => setOfferAmount(String(v))}>{formatPrice(v)}</button>
+                ))}
+              </div>
+            )}
             <div>
               <label htmlFor="offer-amount-input" className="field-label">Your offer</label>
               <div className="price-input">
                 <span className="cur" aria-hidden="true">₹</span>
-                <input
-                  id="offer-amount-input"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={offerAmount}
-                  onChange={(e) => setOfferAmount(e.target.value)}
-                  required
-                />
+                <input id="offer-amount-input" type="number" min="1" step="0.01" inputMode="decimal" value={offerAmount} onChange={(e) => setOfferAmount(e.target.value)} required />
               </div>
               {offerAmount && !isNaN(parseFloat(offerAmount)) && (
-                <div style={{ fontSize: '0.78rem', color: parseFloat(offerAmount) < listing.price ? 'var(--warning)' : 'var(--success)', marginTop: '6px' }}>
-                  {Math.round(Math.abs(1 - parseFloat(offerAmount) / listing.price) * 100)}%
-                  {parseFloat(offerAmount) < listing.price ? ' below' : ' above'} asking price
+                <div style={{ fontSize: '0.78rem', color: parseFloat(offerAmount) < price ? 'var(--warning)' : 'var(--success)', marginTop: '6px' }}>
+                  {Math.round(Math.abs(1 - parseFloat(offerAmount) / price) * 100)}%
+                  {parseFloat(offerAmount) < price ? ' below' : ' above'} asking price
                 </div>
               )}
             </div>
             <div>
               <label htmlFor="offer-message-input" className="field-label">Message to seller <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></label>
-              <textarea
-                id="offer-message-input"
-                className="input"
-                value={offerMessage}
-                onChange={(e) => setOfferMessage(e.target.value)}
-                placeholder="e.g. I can pick it up today"
-                rows={3}
-              />
+              <textarea id="offer-message-input" className="input" value={offerMessage} onChange={(e) => setOfferMessage(e.target.value)} placeholder="e.g. I can pick it up today" rows={3} />
             </div>
             {offerError && <div role="alert" className="remark-box danger" style={{ color: 'var(--danger)' }}>{offerError}</div>}
             <button type="submit" id="offer-submit-btn" disabled={submittingOffer} className="btn-primary btn-lg btn-block">
@@ -317,15 +398,21 @@ export const ProductDetails: React.FC = () => {
         </Sheet>
       )}
 
-      <main className="page pd-page">
-        <Link to="/browse" className="btn btn-ghost btn-sm desktop-only" style={{ marginBottom: '12px', marginLeft: '-8px' }}>
-          <ArrowLeft size={16} /> Back to Explore
-        </Link>
+      <main className="page pd-page pd-v2">
+        <div className="pd-topline desktop-only">
+          <nav className="crumbs" aria-label="Breadcrumb" style={{ marginBottom: 0 }}>
+            <Link to="/">Home</Link><ChevronRight size={14} />
+            {parentCat && <><Link to={`/browse?categoryId=${parentCat.id}`}>{parentCat.name}</Link><ChevronRight size={14} /></>}
+            {listing.category && <><Link to={`/browse?categoryId=${listing.category.id}`}>{listing.category.name}</Link><ChevronRight size={14} /></>}
+            <span aria-current="page" className="crumb-last">{listing.title}</span>
+          </nav>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={handleShare}>{shareNote ? <><Check size={16} /> {shareNote}</> : <><Share2 size={16} /> Share</>}</button>
+        </div>
 
         <div className="pd-layout">
           <div className="pd-main">
             {/* Gallery */}
-            <div className="pd-gallery-block" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div className="pd-gallery-block pd-card">
               <div className="gallery">
                 {!activeMedia ? (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}><ImageIcon size={40} /></div>
@@ -335,9 +422,7 @@ export const ProductDetails: React.FC = () => {
                   <img src={activeMedia.url} alt={listing.title} />
                 )}
                 {mediaCount > 0 && activeMedia?.mediaType !== 'VIDEO' && (
-                  <span className="g-count chip chip-photo chip-upper" style={{ padding: '5px 10px' }}>
-                    <ImageIcon size={13} /> Photo {images.slice(0, activeIdx + 1).filter((m) => m.mediaType !== 'VIDEO').length} of {photoCount}
-                  </span>
+                  <span className="g-count g-count-v2"><Camera size={13} /> {images.slice(0, activeIdx + 1).filter((m) => m.mediaType !== 'VIDEO').length} of {photoCount}</span>
                 )}
                 {videoIndex >= 0 && activeIdx !== videoIndex && (
                   <button type="button" className="g-video chip chip-photo chip-upper" style={{ padding: '5px 10px' }} onClick={() => setActiveMediaIndex(videoIndex)}>
@@ -376,16 +461,36 @@ export const ProductDetails: React.FC = () => {
               )}
             </div>
 
-            {/* Specs + description */}
-            <div className="pd-details-block" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <section aria-labelledby="pd-specs">
-                <h2 id="pd-specs" className="section-title" style={{ marginBottom: '10px' }}>Item details</h2>
-                <div className="spec-grid">
+            {/* Chips + title + price */}
+            <div className="pd-summary-block">
+              <div className="pd-chips">
+                {listing.verifiedAt && <VerifiedByBecho />}
+                <span className="pd-chip"><CheckCircle2 size={14} /> {CONDITION_LABELS[listing.condition] ?? listing.condition}</span>
+                <span className="pd-chip desktop-only"><MapPin size={14} /> {cityName}, {stateName} · Listed {timeAgo(listing.createdAt)}</span>
+              </div>
+              <div className="pd-card pd-titlecard">
+                <div className="pd-overline">{listing.category?.name || 'General'}</div>
+                <h1 className="pd-title">{listing.title}</h1>
+                <div className="pd-price-row">
+                  <span className="price pd-price">{formatPrice(price)}</span>
+                </div>
+                <div className="pd-loc mobile-only"><MapPin size={14} /> {cityName}, {stateName} <span aria-hidden="true">·</span> Posted {timeAgo(listing.createdAt)}</div>
+                {statusLine && <div className="pd-status">{statusLine}</div>}
+              </div>
+            </div>
+
+            {/* Specs + description + safety */}
+            <div className="pd-details-block">
+              <section className="pd-card" aria-labelledby="pd-specs">
+                <div className="pd-sec-head">
+                  <h2 id="pd-specs" className="section-title">Item specifications</h2>
+                </div>
+                <div className="spec-grid v2">
                   <div className="spec-card">
                     <div className="spec-label">Condition</div>
-                    <div className="spec-value">{CONDITION_LABELS[listing.condition] ?? listing.condition}</div>
+                    <div className="spec-value accent">{CONDITION_LABELS[listing.condition] ?? listing.condition}</div>
                   </div>
-                  {specs.map((attr) => (
+                  {(listing.attributes ?? []).map((attr) => (
                     <div key={attr.id} className="spec-card">
                       <div className="spec-label">{attr.attributeDefinition.name}</div>
                       <div className="spec-value">{attrValue(attr)}</div>
@@ -398,131 +503,157 @@ export const ProductDetails: React.FC = () => {
                 </div>
               </section>
 
-              <section className="card card-pad" aria-labelledby="pd-desc">
-                <h2 id="pd-desc" className="section-title" style={{ fontSize: '1rem', marginBottom: '8px' }}>Description</h2>
-                <p className="secondary" style={{ lineHeight: 1.65, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{listing.description}</p>
+              <section className="pd-card" aria-labelledby="pd-desc">
+                <h2 id="pd-desc" className="section-title" style={{ marginBottom: '10px' }}>Seller’s description</h2>
+                <p className="pd-desc">{listing.description}</p>
+              </section>
+
+              <section className="safety" aria-labelledby="pd-safety">
+                <h2 id="pd-safety"><ShieldCheck size={20} /> Becho safe trading advice</h2>
+                <div className="safety-grid">
+                  <div><Users size={18} /><div><strong>Public meetup</strong><span>Meet in a busy, well-lit public place.</span></div></div>
+                  <div><SearchIcon size={18} /><div><strong>Inspect in person</strong><span>Check the item works before you pay.</span></div></div>
+                  <div><Handshake size={18} /><div><strong>Deal directly</strong><span>Pay the seller only after the handover. Never pay in advance.</span></div></div>
+                </div>
               </section>
             </div>
           </div>
 
           <div className="pd-side">
-            {/* Summary: verification, title, price, actions */}
-            <div className="pd-summary-block" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {listing.verifiedAt && (
-                <div className="verified-banner">
-                  <span className="vb-icon"><BadgeCheck size={20} /></span>
-                  <div style={{ minWidth: 0 }}>
-                    <div className="overline" style={{ color: 'var(--success)', fontWeight: 700 }}>Staff-verified listing</div>
-                    <div className="secondary" style={{ fontSize: '0.84rem' }}>Checked by the Becho team</div>
-                  </div>
+            {/* Price + actions */}
+            <div className="pd-actions-block pd-card">
+              <div className="muted" style={{ fontSize: '0.84rem' }}>{isSeller ? 'Your asking price' : 'Listed price'}</div>
+              <div className="price pd-side-price">{formatPrice(price)}</div>
+              {statusLine && <div className="pd-status" style={{ marginTop: 8 }}>{statusLine}</div>}
+
+              {existingOffer && !isSeller && (
+                <div className={`remark-box ${existingOffer.status === 'ACCEPTED' ? 'info' : existingOffer.status === 'REJECTED' ? 'danger' : 'warn'}`} style={{ marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                    {existingOffer.proposedById === user?.id ? 'Your offer' : 'Seller counter-offer'}: {formatPrice(existingOffer.amount)}
+                  </span>
+                  <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                    <Chip tone={OFFER_TONES[existingOffer.status] ?? 'neutral'} upper>{existingOffer.status}</Chip>
+                    {offerPending && <button id="cancel-offer-btn" type="button" onClick={handleCancelOffer} className="link" style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>Cancel offer</button>}
+                  </span>
                 </div>
               )}
 
-              <div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                  <Chip upper square>{listing.category?.name || 'General'}</Chip>
-                  {brand && <Chip upper square tone="primary">{attrValue(brand)}</Chip>}
-                </div>
-                <h1 style={{ fontSize: '1.45rem', fontWeight: 700, lineHeight: 1.25, overflowWrap: 'anywhere' }}>{listing.title}</h1>
-                <div className="muted" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 12px', fontSize: '0.84rem', marginTop: '6px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><MapPin size={14} /> {cityName}, {stateName}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={14} /> Posted {timeAgo(listing.createdAt)}</span>
-                </div>
-              </div>
-
-              <div className="card card-pad">
-                <div className="price" style={{ fontSize: '1.9rem', lineHeight: 1.1 }}>{formatPrice(listing.price)}</div>
-                {listing.status === 'LIVE' ? (
-                  <div className="muted" style={{ fontSize: '0.82rem', marginTop: '4px' }}>{isSeller ? 'Your asking price' : 'Asking price · make an offer to negotiate'}</div>
-                ) : (
-                  <div style={{ marginTop: '8px', fontWeight: 600, fontSize: '0.88rem', color: LISTING_STATUS_LABELS[listing.status]?.color ?? 'var(--text-secondary)' }}>
-                    {listing.status === 'RESERVED' ? 'Reserved — the seller has accepted an offer' : listing.status === 'SOLD' ? 'This item has been sold' : `Status: ${LISTING_STATUS_LABELS[listing.status]?.label ?? listing.status}`}
-                  </div>
-                )}
-
-                {existingOffer && !isSeller && (
-                  <div className={`remark-box ${existingOffer.status === 'ACCEPTED' ? 'info' : existingOffer.status === 'REJECTED' ? 'danger' : 'warn'}`} style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {existingOffer.proposedById === user?.id ? 'Your offer' : 'Seller counter-offer'}: {formatPrice(existingOffer.amount)}
-                    </span>
-                    <span style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
-                      <Chip tone={OFFER_TONES[existingOffer.status] ?? 'neutral'} upper>{existingOffer.status}</Chip>
-                      {offerPending && (
-                        <button id="cancel-offer-btn" type="button" onClick={handleCancelOffer} className="link" style={{ fontSize: '0.8rem', color: 'var(--danger)' }}>Cancel offer</button>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                {isSeller ? (
-                  <div className="info-strip" style={{ margin: '14px 0 0' }}>
-                    <Info size={16} /> This is your listing. <Link to="/my-listings" className="link">Manage it</Link>
-                  </div>
-                ) : (
-                  <div className="action-bar sticky-mobile" style={{ marginTop: '14px' }}>
-                    {favButton()}
+              {isSeller ? (
+                <>
+                  <div className="info-strip" style={{ margin: '14px 0 0' }}><Info size={16} /> This is your listing.</div>
+                  {ownerError && <div role="alert" className="remark-box danger" style={{ color: 'var(--danger)', marginTop: 10 }}>{ownerError}</div>}
+                  <div className="pd-owner desktop-only">{ownerActions(false)}</div>
+                  <div className="action-bar sticky-mobile mobile-only">{ownerActions(true)}</div>
+                </>
+              ) : (
+                <>
+                  <div className="pd-cta desktop-only">
+                    <button id="contact-seller-btn" type="button" onClick={handleContactSeller} disabled={contacting} className="btn-primary btn-lg btn-block">
+                      <MessageSquare size={19} /> {contacting ? 'Connecting…' : 'Chat with seller'}
+                    </button>
                     {canOffer && (
-                      <button
-                        id="make-offer-btn"
-                        type="button"
-                        className="btn btn-outline"
-                        onClick={() => { if (!user) { navigate('/login'); return; } setShowOfferModal(true); }}
-                        disabled={offerPending}
-                        style={{ flex: '0 1 auto', paddingInline: '14px' }}
-                      >
-                        {offerPending ? 'Offer pending' : existingOffer ? 'New offer' : 'Make offer'}
+                      <button id="make-offer-btn" type="button" className="btn btn-soft btn-lg btn-block" onClick={openOfferSheet} disabled={offerPending}>
+                        <Tag size={18} /> {offerPending ? 'Offer pending' : existingOffer ? 'Make a new offer' : 'Make an offer'}
                       </button>
                     )}
-                    <button
-                      id="contact-seller-btn"
-                      type="button"
-                      onClick={handleContactSeller}
-                      disabled={contacting}
-                      className="btn-primary"
-                      style={{ flex: 1, minWidth: 0 }}
-                    >
-                      <MessageCircle size={18} />
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{contacting ? 'Connecting…' : `Chat with ${sellerFirstName}`}</span>
+                  </div>
+
+                  {canOffer && !offerPending && suggestions.length > 0 && (
+                    <form className="quick-offer desktop-only" onSubmit={sendQuickOffer} aria-labelledby="qo-title">
+                      <div className="qo-head">
+                        <span id="qo-title">Quick offer suggestions</span>
+                        <span className="muted">Sent directly to chat</span>
+                      </div>
+                      <div className="qo-chips">
+                        {suggestions.map((v) => (
+                          <button key={v} type="button" className={`qo-chip${Number(quickAmount) === v ? ' on' : ''}`} aria-pressed={Number(quickAmount) === v} onClick={() => setQuickAmount(String(v))}>{formatPrice(v)}</button>
+                        ))}
+                      </div>
+                      <div className="qo-row">
+                        <label className="qo-input">
+                          <span aria-hidden="true">₹</span>
+                          <span className="sr-only">Offer amount</span>
+                          <input type="number" min={1} inputMode="numeric" value={quickAmount} onChange={(e) => setQuickAmount(e.target.value)} />
+                        </label>
+                        <button type="submit" className="btn-primary" disabled={quickBusy}>{quickBusy ? 'Sending…' : 'Send offer'}</button>
+                      </div>
+                    </form>
+                  )}
+                  {quickNote && (
+                    <div role={quickNote.ok ? 'status' : 'alert'} className={`remark-box ${quickNote.ok ? 'info' : 'danger'}`} style={{ marginTop: 10, color: quickNote.ok ? 'var(--text-primary)' : 'var(--danger)' }}>
+                      {quickNote.text} {quickNote.ok && <button type="button" className="link" onClick={handleContactSeller}>Open chat</button>}
+                    </div>
+                  )}
+
+                  <button type="button" className={`wish-btn desktop-only${isFavorited ? ' on' : ''}`} onClick={handleToggleFavorite} aria-pressed={isFavorited}>
+                    <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} /> {isFavorited ? 'Saved to wishlist' : 'Save to wishlist'}
+                  </button>
+
+                  {/* Phone: sticky action bar */}
+                  <div className="action-bar sticky-mobile mobile-only">
+                    {favButton}
+                    {canOffer && (
+                      <button type="button" className="btn btn-outline" onClick={openOfferSheet} disabled={offerPending} style={{ flex: 1 }}>
+                        <Tag size={17} /> {offerPending ? 'Offer pending' : 'Make an offer'}
+                      </button>
+                    )}
+                    <button type="button" onClick={handleContactSeller} disabled={contacting} className="btn-primary" style={{ flex: 1.2, minWidth: 0 }}>
+                      <MessageSquare size={18} /> {contacting ? 'Connecting…' : 'Chat with seller'}
                     </button>
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
 
             {/* Seller */}
-            <section className="pd-seller-block card card-pad" aria-labelledby="pd-seller">
-              <h2 id="pd-seller" className="section-title" style={{ fontSize: '1rem', marginBottom: '12px' }}>About the seller</h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Avatar name={listing.seller.displayName} size="md" />
+            <section className="pd-seller-block pd-card" aria-label="Seller">
+              <div className="seller-top">
+                <Avatar name={listing.seller.displayName} size="md" style={{ borderRadius: 12 }} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '1.02rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{listing.seller.displayName}</span>
-                    {listing.seller.status === 'ACTIVE' && <BadgeCheck size={18} color="var(--success)" aria-label="Verified account" />}
-                  </div>
-                  {listing.seller.status === 'ACTIVE' && <div className="muted" style={{ fontSize: '0.8rem' }}>Verified account</div>}
+                  <div className="seller-name">{listing.seller.displayName}</div>
+                  <div className="muted" style={{ fontSize: '0.84rem' }}>Member since {new Date(listing.seller.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</div>
+                  <div className="link" style={{ fontSize: '0.82rem' }}>{cityName}</div>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', marginTop: '14px' }}>
-                <div className="kv-tile">
-                  <CalendarDays size={18} color="var(--primary-text)" />
-                  <div style={{ minWidth: 0 }}>
-                    <div className="overline">Member since</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{new Date(listing.seller.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</div>
-                  </div>
-                </div>
-                {listing.seller.userCode && (
-                  <div className="kv-tile">
-                    <Hash size={18} color="var(--primary-text)" />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div className="overline">Seller ID</div>
-                      <code style={{ fontSize: '0.86rem', fontWeight: 700 }}>{listing.seller.userCode}</code>
-                    </div>
-                    <button type="button" onClick={copySellerCode} className="link" aria-label="Copy seller ID" style={{ fontSize: '0.75rem', display: 'inline-flex', gap: '3px', alignItems: 'center', textTransform: 'uppercase' }}>
-                      {copiedCode ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
-                    </button>
-                  </div>
+              <div className="seller-chips">
+                {listing.seller.emailVerifiedAt && <span className="ok-chip"><BadgeCheck size={15} /> Email verified</span>}
+                {listing.seller.phoneVerifiedAt && <span className="ok-chip"><BadgeCheck size={15} /> Mobile verified</span>}
+                {!listing.seller.emailVerifiedAt && !listing.seller.phoneVerifiedAt && listing.seller.status === 'ACTIVE' && (
+                  <span className="ok-chip"><BadgeCheck size={15} /> Verified account</span>
                 )}
               </div>
+              {listing.seller.userCode && (
+                <div className="seller-code">
+                  <span className="muted">Seller ID</span>
+                  <code>{listing.seller.userCode}</code>
+                  <button type="button" onClick={copySellerCode} className="link" aria-label="Copy seller ID" style={{ marginLeft: 'auto', fontSize: '0.78rem', display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+                    {copiedCode ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+                  </button>
+                </div>
+              )}
+
+              {moreFromSeller.items.length > 0 && (
+                <div className="more-seller">
+                  <div className="ms-head">
+                    <span>More from {sellerFirstName}</span>
+                    <span className="link" style={{ fontSize: '0.82rem' }}>{moreFromSeller.total} other ad{moreFromSeller.total === 1 ? '' : 's'}</span>
+                  </div>
+                  {moreFromSeller.items.map((m) => {
+                    const photo = m.media?.find((x) => x.mediaType !== 'VIDEO')?.url ?? m.media?.[0]?.url;
+                    return (
+                      <Link key={m.id} to={`/listings/${m.id}`} className="ms-row">
+                        {photo ? <img src={photo} alt="" /> : <span className="ms-noimg"><Tag size={18} /></span>}
+                        <span style={{ minWidth: 0, flex: 1 }}>
+                          <span className="ms-title">{m.title}</span>
+                          {m.category?.name && <span className="ms-sub">{m.category.name}</span>}
+                          <span className="ms-price">{formatPrice(Number(m.price))}</span>
+                        </span>
+                        <ChevronRight size={18} className="muted" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </section>
           </div>
         </div>

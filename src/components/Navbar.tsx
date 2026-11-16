@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, NavLink, useNavigate, useLocation as useRouterLocation } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useSearchParams, useLocation as useRouterLocation } from 'react-router-dom';
 import {
-  ArrowLeft, Compass, Heart, Home as HomeIcon, List, LogOut, MessageCircle, Plus, Search, ShoppingBag, User,
+  ArrowLeft, BadgeCheck, Compass, Heart, Home as HomeIcon, List, LogOut, MessageCircle, MessageSquare, Plus, Search, User,
 } from 'lucide-react';
 import { fetchApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +9,8 @@ import { useNotifications } from '../context/NotificationsContext';
 import { LocationSelector } from './LocationSelector';
 import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
-import { Avatar } from './ui';
+import { Avatar, useCategories } from './ui';
+import { useLocation } from '../context/LocationContext';
 
 interface ConversationSummary {
   id: string;
@@ -53,11 +54,20 @@ const AccountMenu: React.FC = () => {
 
   if (!user) return null;
   const go = (to: string) => { setOpen(false); navigate(to); };
+  const both = !!user.emailVerifiedAt && !!user.phoneVerifiedAt;
+  const trust = both ? 'Email & Mobile verified' : user.emailVerifiedAt ? 'Email verified' : user.phoneVerifiedAt ? 'Mobile verified' : null;
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="Account menu" title={user.displayName} style={{ display: 'flex', padding: 2, borderRadius: 999 }}>
+      <button type="button" className="user-chip" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="Account menu" title={user.displayName}>
         <Avatar name={user.displayName} />
+        <span className="user-chip-text desktop-only">
+          <span className="user-chip-name">
+            <span className="nm">{user.displayName}</span>
+            {user.userCode && <span className="code-tag">{user.userCode}</span>}
+          </span>
+          {trust && <span className="user-chip-trust">{trust}</span>}
+        </span>
       </button>
       {open && (
         <div className="menu" role="menu">
@@ -82,21 +92,113 @@ const AccountMenu: React.FC = () => {
   );
 };
 
+/** Desktop search: category + text, opens Browse. */
 const TopSearch: React.FC = () => {
   const navigate = useNavigate();
-  const [q, setQ] = useState('');
+  const categories = useCategories();
+  const [params] = useSearchParams();
+  const { pathname } = useRouterLocation();
+  const onBrowse = pathname.startsWith('/browse');
+  const [q, setQ] = useState(onBrowse ? params.get('search') ?? '' : '');
+  const [cat, setCat] = useState(onBrowse ? params.get('categoryId') ?? '' : '');
+  useEffect(() => {
+    if (!onBrowse) return;
+    setQ(params.get('search') ?? '');
+    setCat(params.get('categoryId') ?? '');
+  }, [onBrowse, params]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const next = new URLSearchParams();
+    if (cat) next.set('categoryId', cat);
+    if (q.trim()) next.set('search', q.trim());
+    const qs = next.toString();
+    navigate(qs ? `/browse?${qs}` : '/browse');
+  };
+
   return (
-    <form
-      className="topbar-search"
-      role="search"
-      onSubmit={(e) => { e.preventDefault(); navigate(q.trim() ? `/browse?search=${encodeURIComponent(q.trim())}` : '/browse'); }}
-    >
-      <label className="searchbar">
-        <Search size={18} />
-        <span className="sr-only">Search listings</span>
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phones, bikes, sofas…" />
-      </label>
+    <form className="topbar-search" role="search" onSubmit={submit}>
+      <label className="sr-only" htmlFor="top-cat">Category</label>
+      <select id="top-cat" className="ts-cat" value={cat} onChange={(e) => setCat(e.target.value)}>
+        <option value="">All categories</option>
+        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <label className="sr-only" htmlFor="top-q">Search listings</label>
+      <input id="top-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search phones, bikes, sofas…" />
+      <button type="submit" className="ts-go" aria-label="Search"><Search size={18} /></button>
     </form>
+  );
+};
+
+/** Desktop row of top-level categories under the header. */
+const CategoryNav: React.FC = () => {
+  const categories = useCategories();
+  const [params] = useSearchParams();
+  const { pathname } = useRouterLocation();
+  const current = pathname.startsWith('/browse') ? params.get('categoryId') ?? '' : null;
+  if (categories.length === 0) return null;
+  return (
+    <nav className="catnav" aria-label="Categories">
+      <div className="catnav-inner">
+        <Link to="/browse" className={`catnav-link${current === '' ? ' active' : ''}`}>All categories</Link>
+        {categories.map((c) => (
+          <Link key={c.id} to={`/browse?categoryId=${c.id}`} className={`catnav-link${current === c.id ? ' active' : ''}`}>{c.name}</Link>
+        ))}
+      </div>
+    </nav>
+  );
+};
+
+/** Site footer (desktop). Only links to pages that exist. */
+const NO_FOOTER = ['/login', '/register', '/forgot-password', '/verify'];
+
+export const Footer: React.FC = () => {
+  const { areas } = useLocation();
+  const { user } = useAuth();
+  const { pathname } = useRouterLocation();
+  if (NO_FOOTER.includes(pathname)) return null;
+  return (
+    <footer className="site-footer">
+      <div className="footer-inner">
+        <div className="footer-cols">
+          <div>
+            <h3>About Becho</h3>
+            <p>Peer-to-peer classifieds for buying and selling pre-loved goods in your city. Chat, agree a price and deal in person.</p>
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 12 }}>© {new Date().getFullYear()} Becho</p>
+          </div>
+          {areas.length > 0 && (
+            <div>
+              <h3>Popular cities</h3>
+              <ul>
+                {areas.slice(0, 6).map((a) => <li key={a.id}><Link to={`/browse?city=${a.cityCode}`}>{a.cityName}</Link></li>)}
+              </ul>
+            </div>
+          )}
+          <div>
+            <h3>Safe selling tips</h3>
+            <ul className="plain">
+              <li>Meet in busy public places</li>
+              <li>Inspect items carefully in person</li>
+              <li>Keep your conversation in Becho chat</li>
+              <li>Pay only after you have checked the item</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Help & support</h3>
+            <ul>
+              <li><Link to="/browse">Browse all listings</Link></li>
+              <li><Link to="/create-listing">Post an ad</Link></li>
+              {user ? <li><Link to="/account">My account</Link></li> : <li><Link to="/login">Sign in</Link></li>}
+              <li><Link to="/forgot-password">Reset your password</Link></li>
+            </ul>
+          </div>
+        </div>
+        <div className="footer-strip">
+          <span><BadgeCheck size={18} /> Free to post · Verified accounts · Deal directly, in person</span>
+          <span className="muted">Buy & sell locally</span>
+        </div>
+      </div>
+    </footer>
   );
 };
 
@@ -155,37 +257,31 @@ export const Navbar: React.FC<NavbarProps> = ({ title, backTo, actions, hideTabs
       <header className={`topbar${title ? ' has-sub' : ''}`}>
         <div className="topbar-inner topbar-main">
           <Link to="/" className="brand" aria-label="Becho home">
-            <span className="brand-mark" aria-hidden="true"><ShoppingBag size={17} strokeWidth={2.4} /></span>
-            Becho
+            <span className="brand-mark" aria-hidden="true">B</span>
+            <span className="brand-text">
+              <span className="brand-name">Becho</span>
+              <span className="brand-tag">Buy & Sell Locally</span>
+            </span>
           </Link>
+          <span className="brand-sep desktop-only" aria-hidden="true" />
           <LocationSelector />
           <TopSearch />
 
           <div className="topbar-right">
-            <nav className="topbar-links" aria-label="Main">
-              <NavLink to="/browse" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Explore">
-                <Compass size={18} /> <span className="label">Explore</span>
-              </NavLink>
-              {user && (
-                <>
-                  <NavLink to="/chat" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Chats">
-                    <MessageCircle size={18} /> <span className="label">Chats</span>
-                    {chatBadge > 0 && <span className="chip chip-primary" style={{ padding: '0 6px', fontSize: '0.68rem' }}>{chatBadge}</span>}
-                  </NavLink>
-                  <NavLink to="/favorites" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`} title="Saved">
-                    <Heart size={18} /> <span className="label">Saved</span>
-                  </NavLink>
-                </>
-              )}
-            </nav>
-
             {user ? (
               <>
+                <NavLink to="/favorites" className={({ isActive }) => `icon-btn topbar-icon desktop-only${isActive ? ' active' : ''}`} title="Saved ads" aria-label="Saved ads">
+                  <Heart size={20} />
+                </NavLink>
+                <NavLink to="/chat" className={({ isActive }) => `icon-btn topbar-icon desktop-only${isActive ? ' active' : ''}`} title="Messages" aria-label={chatBadge > 0 ? `Messages, ${chatBadge} unread` : 'Messages'}>
+                  <MessageSquare size={20} />
+                  {chatBadge > 0 && <span className="badge-dot primary">{chatBadge > 9 ? '9+' : chatBadge}</span>}
+                </NavLink>
                 <NotificationBell />
-                <Link to="/create-listing" className="btn-primary desktop-only" style={{ minHeight: 40 }}>
-                  <Plus size={18} /> Sell
-                </Link>
                 <AccountMenu />
+                <Link to="/create-listing" className="btn-primary desktop-only" style={{ minHeight: 40 }}>
+                  <Plus size={18} /> Post an Ad
+                </Link>
               </>
             ) : (
               <>
@@ -197,6 +293,7 @@ export const Navbar: React.FC<NavbarProps> = ({ title, backTo, actions, hideTabs
             )}
           </div>
         </div>
+        <CategoryNav />
 
         {title && (
           <div className="subbar">

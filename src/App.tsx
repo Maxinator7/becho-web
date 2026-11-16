@@ -5,6 +5,7 @@ import { LocationProvider } from './context/LocationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { RequireAuth } from './components/RequireAuth';
+import { Footer } from './components/Navbar';
 import { Home } from './pages/Marketplace/Home';
 import { Browse } from './pages/Marketplace/Browse';
 import { ProductDetails } from './pages/Marketplace/ProductDetails';
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/*" element={<AdminRedirect />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              <Footer />
             </Router>
           </LocationProvider>
         </NotificationsProvider>

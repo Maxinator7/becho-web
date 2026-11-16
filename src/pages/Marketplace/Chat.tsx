@@ -2,11 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { fetchApi } from '../../api/client';
 import { Navbar } from '../../components/Navbar';
-import { Avatar, Chip, Sheet } from '../../components/ui';
+import { Chip, Sheet } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { formatPrice, timeAgo } from '../../utils/format';
-import { MessageCircle, Send, CheckCheck, Tag, TrendingDown, CheckCircle, XCircle, RotateCcw, X, Handshake, PackageCheck, Info, ArrowLeft, ArrowLeftRight, Lock } from 'lucide-react';
+import { MessageCircle, Send, CheckCheck, Tag, TrendingDown, CheckCircle, XCircle, RotateCcw, X, Handshake, PackageCheck, Info, ArrowLeft, ArrowLeftRight, Lock, Search, Plus, ExternalLink } from 'lucide-react';
 
 interface ConversationItem {
   id: string;
@@ -86,6 +86,33 @@ const EVENT_ICONS: Record<string, { Icon: typeof Tag; color: string }> = {
   RESERVATION_RELEASED: { Icon: RotateCcw, color: 'var(--warning)' },
 };
 
+/** Round to a step that suits the amount (₹500 for big tickets, ₹10 for small). */
+const roundStep = (v: number) => {
+  const step = v >= 50000 ? 500 : v >= 5000 ? 100 : v >= 500 ? 10 : 1;
+  return Math.max(step, Math.round(v / step) * step);
+};
+/** Up to three amounts between two prices (25%, 50%, 75% of the gap). */
+const between = (from: number, to: number) => {
+  const out: number[] = [];
+  for (const f of [0.25, 0.5, 0.75]) {
+    const v = roundStep(from + (to - from) * f);
+    if (v !== from && v !== to && !out.includes(v)) out.push(v);
+  }
+  return out;
+};
+/** Opening offers at about 95%, 97% and 99% of the asking price. */
+const openingOffers = (price: number) => {
+  const out: number[] = [];
+  for (const pct of [0.95, 0.97, 0.99]) {
+    const v = roundStep(price * pct);
+    if (v < price && !out.includes(v)) out.push(v);
+  }
+  return out;
+};
+
+type InboxTab = 'all' | 'offers' | 'buying' | 'selling';
+interface OfferSummary { id: string; listingId: string; buyerId: string; status: string; createdAt: string; listing?: { id: string } }
+
 export const Chat: React.FC = () => {
   const { user } = useAuth();
   const { refresh: refreshNotifications } = useNotifications();
@@ -123,6 +150,11 @@ export const Chat: React.FC = () => {
   const [newOfferError, setNewOfferError] = useState('');
   const [sendingOffer, setSendingOffer] = useState(false);
 
+  // Inbox filters. "Offers" = conversations with any offer (from /offers/mine + /offers/received).
+  const [tab, setTab] = useState<InboxTab>('all');
+  const [inboxQuery, setInboxQuery] = useState('');
+  const [offerIndex, setOfferIndex] = useState<Record<string, string>>({});
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageId = useRef<string | null>(null);
 
@@ -145,8 +177,22 @@ export const Chat: React.FC = () => {
     setLoading(false);
   };
 
+  /** Latest offer status per listing+buyer pair, for the inbox chips and the Offers tab. */
+  const loadOfferIndex = async () => {
+    const [mine, received] = await Promise.all([
+      fetchApi<OfferSummary[]>('/offers/mine'),
+      fetchApi<OfferSummary[]>('/offers/received'),
+    ]);
+    const all = [...(mine.success && mine.data ? mine.data : []), ...(received.success && received.data ? received.data : [])]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const index: Record<string, string> = {};
+    for (const o of all) index[`${o.listingId ?? o.listing?.id}:${o.buyerId}`] = o.status;
+    setOfferIndex(index);
+  };
+
   useEffect(() => {
     loadConversations();
+    void loadOfferIndex();
     const interval = setInterval(loadConversations, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -183,6 +229,7 @@ export const Chat: React.FC = () => {
   const loadOffers = (conv: ConversationItem) =>
     fetchApi<Offer[]>(`/offers/chain?listingId=${conv.listingId}&buyerId=${conv.buyer.id}`).then((res) => {
       if (res.success && res.data) setOffers([...res.data].reverse());
+      void loadOfferIndex();
     });
 
   const activeListingId = activeConversation?.listingId;
@@ -195,7 +242,9 @@ export const Chat: React.FC = () => {
   }, [activeListingId, activeBuyerId, user]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll the thread itself (scrollIntoView would also scroll the page on desktop).
+    const thread = messagesEndRef.current?.parentElement;
+    if (thread) thread.scrollTo({ top: thread.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -247,9 +296,9 @@ export const Chat: React.FC = () => {
     loadConversations();
   };
 
-  const handleOpenCounter = (offer: Offer) => {
+  const handleOpenCounter = (offer: Offer, amount?: number) => {
     setCounterTargetOffer(offer);
-    setCounterAmount(String(Math.round(offer.amount * 1.05)));
+    setCounterAmount(String(amount ?? Math.round(offer.amount * 1.05)));
     setCounterError('');
     setShowCounterModal(true);
   };
@@ -280,9 +329,9 @@ export const Chat: React.FC = () => {
     setMobileView('thread');
   };
 
-  const openNewOffer = () => {
+  const openNewOffer = (amount?: number) => {
     if (!activeConversation) return;
-    setNewOfferAmount(String(Math.floor(Number(activeConversation.listing.price) * 0.9)));
+    setNewOfferAmount(String(amount ?? Math.floor(Number(activeConversation.listing.price) * 0.9)));
     setNewOfferMessage('');
     setNewOfferError('');
     setShowNewOffer(true);
@@ -320,6 +369,43 @@ export const Chat: React.FC = () => {
   const canMakeOffer = !!activeConversation && !iAmSeller && listingStatus === 'LIVE' && !myPendingOffer;
   const offerById = (id?: string | null) => (id ? offers.find((o) => o.id === id) : undefined);
 
+  // Quick amounts: counter a pending offer from the other person, or open with a first offer.
+  const theirPending = pendingOffers.find((o) => o.proposedById !== user?.id);
+  const myLast = offers.find((o) => o.proposedById === user?.id);
+  const listPrice = Number(activeConversation?.listing.price ?? 0);
+  const quickCounter = theirPending
+    ? between(Number(theirPending.amount), iAmSeller ? (myLast ? Number(myLast.amount) : listPrice) : (myLast ? Number(myLast.amount) : Number(theirPending.amount) * 0.9))
+    : [];
+  const quickOpening = canMakeOffer ? openingOffers(listPrice) : [];
+
+  // Inbox list after tab + search filters.
+  const convOfferStatus = (c: ConversationItem) => offerIndex[`${c.listingId}:${c.buyer.id}`];
+  const unreadTotal = conversations.filter((c) => { const m = c.messages?.[0]; return !!m && !!m.senderId && m.senderId !== user?.id && !m.isRead; }).length;
+  const tabCounts: Record<InboxTab, number> = {
+    all: conversations.length,
+    offers: conversations.filter((c) => !!convOfferStatus(c)).length,
+    buying: conversations.filter((c) => c.buyer.id === user?.id).length,
+    selling: conversations.filter((c) => c.seller.id === user?.id).length,
+  };
+  const q = inboxQuery.trim().toLowerCase();
+  const visibleConversations = conversations.filter((c) => {
+    if (tab === 'offers' && !convOfferStatus(c)) return false;
+    if (tab === 'buying' && c.buyer.id !== user?.id) return false;
+    if (tab === 'selling' && c.seller.id !== user?.id) return false;
+    if (!q) return true;
+    const other = c.buyer.id === user?.id ? c.seller : c.buyer;
+    return other.displayName.toLowerCase().includes(q) || c.listing.title.toLowerCase().includes(q);
+  });
+  /** Chip on an inbox row: deal state first, then the latest offer. */
+  const rowChip = (c: ConversationItem): { label: string; cls: string } | null => {
+    const st = convOfferStatus(c);
+    if (c.listing.status === 'SOLD') return { label: 'Sold', cls: 'neutral' };
+    if (c.listing.status === 'RESERVED' && st === 'ACCEPTED') return { label: 'Deal agreed', cls: 'success' };
+    if (st === 'PENDING') return { label: 'Offer made', cls: 'primary' };
+    if (st === 'COUNTERED') return { label: 'Countered', cls: 'primary' };
+    return null;
+  };
+
   return (
     <>
       <Navbar />
@@ -331,6 +417,13 @@ export const Chat: React.FC = () => {
             Their offer: <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(counterTargetOffer.amount)}</strong>
           </p>
           <form onSubmit={handleSubmitCounter} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {quickCounter.length > 0 && counterTargetOffer.id === theirPending?.id && (
+              <div className="qo-chips" role="group" aria-label="Suggested amounts">
+                {quickCounter.map((v) => (
+                  <button key={v} type="button" className={`qo-chip${Number(counterAmount) === v ? ' on' : ''}`} aria-pressed={Number(counterAmount) === v} onClick={() => setCounterAmount(String(v))}>{formatPrice(v)}</button>
+                ))}
+              </div>
+            )}
             <div>
               <label htmlFor="counter-amount-input" className="field-label">Your counter amount</label>
               <div className="price-input">
@@ -363,6 +456,13 @@ export const Chat: React.FC = () => {
             Listed at <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(activeConversation.listing.price)}</strong>.
           </p>
           <form onSubmit={handleSubmitNewOffer} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {quickOpening.length > 0 && (
+              <div className="qo-chips" role="group" aria-label="Suggested offers">
+                {quickOpening.map((v) => (
+                  <button key={v} type="button" className={`qo-chip${Number(newOfferAmount) === v ? ' on' : ''}`} aria-pressed={Number(newOfferAmount) === v} onClick={() => setNewOfferAmount(String(v))}>{formatPrice(v)}</button>
+                ))}
+              </div>
+            )}
             <div>
               <label htmlFor="chat-offer-amount" className="field-label">Your offer</label>
               <div className="price-input">
@@ -438,11 +538,25 @@ export const Chat: React.FC = () => {
         <div className="chat-layout" data-view={mobileView}>
           {/* Conversation list */}
           <section className="chat-list" aria-labelledby="chat-list-title">
-            <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border-color)' }}>
-              <div className="overline">Messages</div>
-              <h1 id="chat-list-title" className="page-title" style={{ fontSize: '1.3rem' }}>Chats</h1>
+            <div className="inbox-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h1 id="chat-list-title" className="page-title" style={{ fontSize: '1.45rem' }}>Messages</h1>
+                {unreadTotal > 0 && <span className="unread-chip">{unreadTotal} unread</span>}
+              </div>
+              <label className="inbox-search">
+                <Search size={16} />
+                <span className="sr-only">Search chats</span>
+                <input type="search" value={inboxQuery} onChange={(e) => setInboxQuery(e.target.value)} placeholder="Search chats, items or people…" />
+              </label>
+              <div className="inbox-tabs" role="tablist" aria-label="Filter chats">
+                {(['all', 'offers', 'buying', 'selling'] as InboxTab[]).map((t) => (
+                  <button key={t} type="button" role="tab" aria-selected={tab === t} className={`inbox-tab${tab === t ? ' on' : ''}`} onClick={() => setTab(t)}>
+                    {t === 'all' ? 'All' : t === 'offers' ? 'Offers' : t === 'buying' ? 'Buying' : 'Selling'} ({tabCounts[t]})
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
+            <div className="inbox-list">
               {loading ? (
                 <div className="muted" style={{ padding: '32px 16px', textAlign: 'center' }}>Loading conversations…</div>
               ) : conversations.length === 0 ? (
@@ -452,27 +566,31 @@ export const Chat: React.FC = () => {
                   <p className="secondary" style={{ fontSize: '0.88rem', marginBottom: '16px' }}>Open a listing and tap “Chat” to message the seller.</p>
                   <button type="button" className="btn-primary" onClick={() => navigate('/browse')}>Explore listings</button>
                 </div>
+              ) : visibleConversations.length === 0 ? (
+                <div className="muted" style={{ padding: '32px 16px', textAlign: 'center', fontSize: '0.9rem' }}>No chats match.</div>
               ) : (
-                conversations.map((conv) => {
+                visibleConversations.map((conv) => {
                   const other = conv.buyer.id === user?.id ? conv.seller : conv.buyer;
                   const last = conv.messages && conv.messages.length > 0 ? conv.messages[0] : null;
                   const unread = !!last && !!last.senderId && last.senderId !== user?.id && !last.isRead;
                   const isSelected = activeConversationId === conv.id;
-                  const thumb = conv.listing.media && conv.listing.media.length > 0 ? conv.listing.media[0].url : undefined;
+                  const chip = rowChip(conv);
+                  const initials = other.displayName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('');
                   return (
-                    <button key={conv.id} type="button" className={`conv-row${isSelected ? ' on' : ''}`} onClick={() => openConversation(conv.id)} aria-current={isSelected ? 'true' : undefined}>
-                      {thumb ? <img src={thumb} alt="" className="conv-thumb" /> : <span className="conv-thumb" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Tag size={20} color="var(--text-muted)" /></span>}
+                    <button key={conv.id} type="button" className={`conv-row v2${isSelected ? ' on' : ''}`} onClick={() => openConversation(conv.id)} aria-current={isSelected ? 'true' : undefined}>
+                      <span className="conv-avatar" aria-hidden="true">{initials}</span>
                       <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
-                          <span style={{ fontWeight: unread ? 700 : 600, fontSize: '0.92rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{other.displayName}</span>
-                          <span className="muted" style={{ fontSize: '0.72rem', flexShrink: 0 }}>{timeAgo(conv.lastMessageAt)}</span>
+                        <span className="cv-top">
+                          <span className="cv-name" style={{ fontWeight: unread ? 800 : 700 }}>{other.displayName}</span>
+                          <span className="muted" style={{ fontSize: '0.74rem', flexShrink: 0 }}>{timeAgo(conv.lastMessageAt)}</span>
                         </span>
-                        <span className="secondary" style={{ display: 'block', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conv.listing.title}</span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="muted" style={{ flex: 1, fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: unread ? 'var(--text-primary)' : undefined, fontWeight: unread ? 600 : 400 }}>
+                        <span className="cv-item"><span className="cv-title">{conv.listing.title}</span> · {formatPrice(Number(conv.listing.price))}</span>
+                        <span className="cv-bottom">
+                          <span className="cv-last" style={{ color: unread ? 'var(--text-primary)' : undefined, fontWeight: unread ? 600 : 400 }}>
                             {last ? last.content : 'Conversation started'}
                           </span>
-                          {unread && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: 99, background: 'var(--primary)', flexShrink: 0 }} />}
+                          {chip && <span className={`cv-chip ${chip.cls}`}>{chip.label}</span>}
+                          {unread && <span aria-label="Unread" className="cv-dot" />}
                         </span>
                       </span>
                     </button>
@@ -486,13 +604,23 @@ export const Chat: React.FC = () => {
           <section className="chat-thread" aria-label="Conversation">
             {activeConversation && otherParty ? (
               <>
-                <div className="chat-head">
+                <div className="chat-head v2">
                   <button type="button" className="icon-btn mobile-only" onClick={() => setMobileView('list')} aria-label="Back to chats"><ArrowLeft size={22} /></button>
-                  <Avatar name={otherParty.displayName} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.98rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{otherParty.displayName}</div>
-                    <div className="muted" style={{ fontSize: '0.76rem' }}>{iAmSeller ? 'Interested buyer' : 'Seller'}</div>
+                  <span className="conv-avatar sq desktop-only" aria-hidden="true">{otherParty.displayName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('')}</span>
+                  <div className="ch-who">
+                    <div className="ch-name">{otherParty.displayName}</div>
+                    <div className="muted" style={{ fontSize: '0.78rem' }}>{iAmSeller ? 'Interested buyer' : 'Seller'}</div>
                   </div>
+                  <button type="button" className="ch-listing" onClick={() => navigate(`/listings/${activeConversation.listing.id}`)} aria-label={`View ad: ${activeConversation.listing.title}`}>
+                    {activeConversation.listing.media && activeConversation.listing.media.length > 0
+                      ? <img src={activeConversation.listing.media[0].url} alt="" />
+                      : <span className="ch-noimg"><Tag size={16} /></span>}
+                    <span className="ch-l-text">
+                      <span className="ch-l-title">{activeConversation.listing.title}</span>
+                      <span className="ch-l-price">{formatPrice(Number(activeConversation.listing.price))} <span className="muted">· Listed</span></span>
+                    </span>
+                    <span className="ch-view">View ad <ExternalLink size={13} /></span>
+                  </button>
                   {offers.length > 0 && (
                     <button
                       id="offers-panel-btn"
@@ -503,47 +631,30 @@ export const Chat: React.FC = () => {
                       style={awaitingMyReply ? { background: tint('var(--warning)'), color: 'var(--warning)', borderColor: 'var(--warning-border)' } : undefined}
                     >
                       <TrendingDown size={14} />
-                      {awaitingMyReply ? 'Offer waiting' : pendingOffers.length ? `${pendingOffers.length} pending` : 'Offers'}
+                      <span className="desktop-only">{awaitingMyReply ? 'Offer waiting' : pendingOffers.length ? `${pendingOffers.length} pending` : 'Offers'}</span>
                     </button>
                   )}
                 </div>
 
-                <div className="listing-strip">
-                  {activeConversation.listing.media && activeConversation.listing.media.length > 0 && <img src={activeConversation.listing.media[0].url} alt="" />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.86rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeConversation.listing.title}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="price" style={{ fontSize: '1rem' }}>{formatPrice(activeConversation.listing.price)}</span>
-                      <span className="chip chip-neutral chip-square" style={{ fontSize: '0.66rem' }}>Listed price</span>
-                    </div>
-                  </div>
-                  <button type="button" className="link" style={{ fontSize: '0.85rem', flexShrink: 0 }} onClick={() => navigate(`/listings/${activeConversation.listing.id}`)}>View ad</button>
-                </div>
-
                 {/* Deal status */}
                 {listingStatus === 'RESERVED' && acceptedOffer && (
-                  <div className="deal-panel" role="status">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', minWidth: 0 }}>
-                        <Handshake size={22} color="var(--success)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <div>
-                          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-primary)' }}>Deal agreed for {formatPrice(acceptedOffer.amount)}!</div>
-                          <div className="secondary" style={{ fontSize: '0.82rem', lineHeight: 1.4 }}>
-                            {iAmSeller
-                              ? `Reserved for ${acceptedOffer.buyer.displayName}. Arrange a meet-up here, then mark it as sold once you've been paid.`
-                              : 'The seller has reserved this item for you. Agree a time and a safe public place to meet, check the item, then pay on handover.'}
-                          </div>
-                        </div>
+                  <div className="deal-bar" role="status">
+                    <span className="db-icon"><Handshake size={22} /></span>
+                    <div className="db-text">
+                      <div className="db-title">Deal agreed for {formatPrice(Number(acceptedOffer.amount))}! <span className="db-lock"><Lock size={11} /> Price locked</span></div>
+                      <div className="db-sub">
+                        {iAmSeller
+                          ? `Reserved for ${acceptedOffer.buyer.displayName}. Meet in person, then mark it as sold once you've been paid.`
+                          : 'The seller has reserved this item for you. Agree a safe public place to meet, check the item, then pay on handover.'}
                       </div>
-                      <span className="chip chip-upper chip-solid-success" style={{ flexShrink: 0 }}><Lock size={11} /> Reserved</span>
                     </div>
                     {iAmSeller && (
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                        <button type="button" onClick={() => handleDealAction('mark-sold')} disabled={dealBusy} className="btn btn-deal" style={{ flex: 1 }}>
+                      <div className="db-actions">
+                        <button type="button" onClick={() => handleDealAction('mark-sold')} disabled={dealBusy} className="btn btn-deal">
                           <PackageCheck size={16} /> Mark as sold
                         </button>
-                        <button type="button" onClick={() => handleDealAction('mark-available')} disabled={dealBusy} className="btn btn-outline" style={{ flex: 1 }}>
-                          Cancel reservation
+                        <button type="button" onClick={() => handleDealAction('mark-available')} disabled={dealBusy} className="btn btn-outline db-cancel">
+                          Cancel deal
                         </button>
                       </div>
                     )}
@@ -613,14 +724,25 @@ export const Chat: React.FC = () => {
                 <div className="composer-wrap">
                   {(canMakeOffer || awaitingMyReply || offers.length > 0) && (
                     <div className="quick-chips">
+                      {awaitingMyReply && theirPending && (
+                        <button type="button" className="quick-chip warn" onClick={() => handleOpenCounter(theirPending, quickCounter[1] ?? quickCounter[0])}><Plus size={14} /> Make counter-offer</button>
+                      )}
                       {awaitingMyReply && (
-                        <button type="button" className="quick-chip warn" onClick={() => setShowOfferPanel(true)}><TrendingDown size={14} /> Respond to offer</button>
+                        <button type="button" className="quick-chip" onClick={() => setShowOfferPanel(true)}><TrendingDown size={14} /> Respond to offer</button>
                       )}
                       {canMakeOffer && (
-                        <button type="button" className="quick-chip" onClick={openNewOffer}><Tag size={14} /> Make an offer</button>
+                        <button type="button" className="quick-chip" onClick={() => openNewOffer(quickOpening[1] ?? quickOpening[0])}><Tag size={14} /> Make an offer</button>
                       )}
                       {offers.length > 0 && !awaitingMyReply && (
                         <button type="button" className="quick-chip" onClick={() => setShowOfferPanel(true)}><RotateCcw size={14} /> Offer history</button>
+                      )}
+                      {(theirPending ? quickCounter : quickOpening).length > 0 && (
+                        <>
+                          <span className="qs-label">Quick suggestions:</span>
+                          {(theirPending ? quickCounter : quickOpening).map((v) => (
+                            <button key={v} type="button" className="quick-chip amt" onClick={() => (theirPending ? handleOpenCounter(theirPending, v) : openNewOffer(v))}>{formatPrice(v)}</button>
+                          ))}
+                        </>
                       )}
                     </div>
                   )}

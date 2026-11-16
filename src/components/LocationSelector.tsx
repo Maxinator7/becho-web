@@ -28,7 +28,7 @@ export const LocationSelector: React.FC = () => {
     <div ref={ref} style={{ position: 'relative', minWidth: 0 }}>
       <button type="button" className="city-pill" onClick={() => setIsOpen(!isOpen)} aria-haspopup="listbox" aria-expanded={isOpen} aria-label={`City: ${selectedArea ? selectedArea.cityName : 'All cities'}. Change city`}>
         <MapPin size={16} color="var(--primary-text)" />
-        <span>{selectedArea ? `${selectedArea.cityName}, ${selectedArea.stateCode}` : 'All cities'}</span>
+        <span>{selectedArea ? selectedArea.cityName : 'All cities'}</span>
         <ChevronDown size={15} color="var(--text-muted)" />
       </button>
 

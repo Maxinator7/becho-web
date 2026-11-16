@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { fetchApi, AuthTokens } from '../../api/client';
 import { useAuth, UserProfile } from '../../context/AuthContext';
-import { UserPlus } from 'lucide-react';
-import { Alert, AuthCard, PasswordChecklist, PasswordField, TextField, linkStyle } from '../../components/FormControls';
+import { ArrowRight, Lock, Mail, RotateCcw, User } from 'lucide-react';
+import { Alert, AuthCard, PasswordChecklist, PasswordField, PasswordStrength, TextField, linkStyle } from '../../components/FormControls';
 import {
   FieldErrors, fieldErrorsFrom, focusFirstError, hasErrors, normalizeIndianMobile,
   validateConfirm, validateEmail, validateMobile, validateName, validatePassword,
@@ -30,6 +30,8 @@ export const Register: React.FC = () => {
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
   const [formError, setFormError] = useState<{ code: string; message: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
+  const [agreeError, setAgreeError] = useState<string | undefined>();
 
   const set = (field: Field, value: string) => {
     const next = { ...values, [field]: value };
@@ -57,6 +59,9 @@ export const Register: React.FC = () => {
     for (const f of FIELDS) next[f] = validators[f](trimmed);
     setErrors(next);
     setTouched({ name: true, mobile: true, email: true, password: true, confirm: true });
+    const termsErr = agreed ? undefined : 'Please agree to the terms to continue';
+    setAgreeError(termsErr);
+    if (!hasErrors(next) && termsErr) { document.getElementById('reg-terms')?.focus(); return; }
     if (hasErrors(next)) {
       focusFirstError(next, FIELDS, 'reg-');
       return;
@@ -110,9 +115,9 @@ export const Register: React.FC = () => {
   return (
     <AuthCard
       maxWidth={460}
-      overline="Create account"
-      title="Join Becho"
-      subtitle="Buy and sell near you. It takes a minute."
+      overline="Your neighbourhood marketplace"
+      title="Create your Becho account"
+      subtitle="Buy and sell pre-loved goods with people in your city."
       footer={<>Already registered? <Link to="/login" style={linkStyle}>Sign in</Link></>}
     >
       {formError && (
@@ -132,11 +137,11 @@ export const Register: React.FC = () => {
         <TextField
           id="reg-name" label="Full name" name="name" autoComplete="name" required maxLength={60}
           value={values.name} onChange={(e) => set('name', e.target.value)} onBlur={() => blur('name')}
-          placeholder="e.g. Priya Sharma" error={errors.name}
+          placeholder="e.g. Priya Sharma" error={errors.name} icon={<User size={18} />}
         />
         <TextField
           id="reg-mobile" label="Mobile number" name="tel" type="tel" inputMode="numeric" autoComplete="tel-national" required
-          prefix="+91" maxLength={16}
+          prefix={<><span className="flag" aria-hidden="true">🇮🇳</span> +91</>} maxLength={16}
           value={values.mobile} onChange={(e) => set('mobile', e.target.value.replace(/[^\d\s+-]/g, ''))} onBlur={() => blur('mobile')}
           placeholder="98765 43210" error={errors.mobile}
           hint="We’ll use this to keep your account secure. It isn’t shown to buyers."
@@ -144,28 +149,42 @@ export const Register: React.FC = () => {
         <TextField
           id="reg-email" label="Email" name="email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} required
           value={values.email} onChange={(e) => set('email', e.target.value)} onBlur={() => blur('email')}
-          placeholder="you@example.com" error={errors.email}
+          placeholder="you@example.com" error={errors.email} icon={<Mail size={18} />}
           hint="We’ll email you a 6-digit code to verify your account."
         />
         <PasswordField
           id="reg-password" label="Password" name="new-password" autoComplete="new-password" required maxLength={128}
           value={values.password} onChange={(e) => set('password', e.target.value)} onBlur={() => blur('password')}
-          error={errors.password}
+          error={errors.password} icon={<Lock size={18} />}
         >
-          <PasswordChecklist password={values.password} />
+          <PasswordStrength password={values.password}>
+            <PasswordChecklist password={values.password} />
+          </PasswordStrength>
         </PasswordField>
         <PasswordField
           id="reg-confirm" label="Confirm password" name="confirm-password" autoComplete="new-password" required maxLength={128}
           value={values.confirm} onChange={(e) => set('confirm', e.target.value)} onBlur={() => blur('confirm')}
-          error={errors.confirm}
+          error={errors.confirm} icon={<RotateCcw size={18} />}
+          success={!!values.confirm && values.confirm === values.password && !validatePassword(values.password)}
         />
 
+        <div>
+          <label className="terms-check" htmlFor="reg-terms">
+            <input
+              id="reg-terms" type="checkbox" checked={agreed}
+              aria-invalid={!!agreeError} aria-describedby={agreeError ? 'reg-terms-error' : undefined}
+              onChange={(e) => { setAgreed(e.target.checked); if (e.target.checked) setAgreeError(undefined); }}
+            />
+            <span>I agree to Becho’s terms of use: I’ll deal honestly, meet safely in public places and only list items I own.</span>
+          </label>
+          {agreeError && <div id="reg-terms-error" role="alert" style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '0.3rem' }}>{agreeError}</div>}
+        </div>
+
         <button
-          type="submit" disabled={loading} aria-busy={loading} className="btn-primary"
-          style={{ width: '100%', minHeight: '48px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1 }}
+          type="submit" disabled={loading} aria-busy={loading} className="btn-primary btn-cta"
+          style={{ width: '100%', minHeight: '52px', marginTop: '0.25rem', opacity: loading ? 0.7 : 1 }}
         >
-          <UserPlus size={18} />
-          {loading ? 'Creating account…' : 'Create account'}
+          {loading ? 'Creating account…' : <>Create account &amp; verify <ArrowRight size={19} /></>}
         </button>
       </form>
     </AuthCard>
