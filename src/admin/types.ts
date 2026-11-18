@@ -165,3 +165,27 @@ export interface Analytics {
   funnel: { published: number; withOffer: number; withDeal: number; sold: number };
   moderation: { queueSize: number; reviewedInPeriod: number; avgHoursToApprove: number | null; actions: Record<string, number> };
 }
+
+/** GET /admin/feedback row (closed-beta feedback inbox). */
+export interface AdminFeedback {
+  id: string;
+  source: 'WEB' | 'MOBILE' | 'ADMIN';
+  category: 'BUG' | 'IDEA' | 'CONFUSING' | 'PRAISE' | 'OTHER';
+  rating: number | null;
+  message: string;
+  page: string | null;
+  appVersion: string | null;
+  userAgent: string | null;
+  contactOk: boolean;
+  status: 'NEW' | 'IN_PROGRESS' | 'DONE' | 'WONT_FIX';
+  staffNote: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  user: { id: string; userCode: string; displayName: string; email: string | null; phone: string | null } | null;
+}
+
+export interface AdminFeedbackList {
+  items: AdminFeedback[];
+  pagination: Pagination;
+  summary: { byStatus: Partial<Record<AdminFeedback['status'], number>>; averageRating: number | null; ratedCount: number };
+}

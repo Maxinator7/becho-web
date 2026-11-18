@@ -5,11 +5,12 @@ import { Navbar } from '../../components/Navbar';
 import { useAuth, UserProfile } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import {
-  ArrowRight, BadgeCheck, Bell, Check, ChevronRight, Copy, Handshake, Heart, List, Lock, LogOut, MessageSquare, Palette, Pencil, PlusCircle,
+  ArrowRight, BadgeCheck, Bell, Check, ChevronRight, Copy, Handshake, Heart, List, Lock, LogOut, MessageSquare, MessageSquarePlus, Palette, Pencil, PlusCircle, ShieldCheck,
 } from 'lucide-react';
 import { Alert, PasswordChecklist, PasswordField, TextField } from '../../components/FormControls';
 import { Avatar, Chip, ListingCard, ListingCardData } from '../../components/ui';
 import { ThemeSwitch } from '../../components/ThemeToggle';
+import { useBeta } from '../../feedback/Beta';
 import { MyListingItem, MyListingsPanel } from '../Marketplace/MyListings';
 import {
   FieldErrors, fieldErrorsFrom, focusFirstError, formatIndianMobile, hasErrors, normalizeIndianMobile,
@@ -260,6 +261,7 @@ const PasswordSection: React.FC = () => {
 
 export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
   const { user, refreshUser, logout } = useAuth();
+  const { openFeedback } = useBeta();
   const { desktopAlerts, enableDesktopAlerts } = useNotifications();
   const navigate = useNavigate();
   const notice = ((useRouterLocation().state || {}) as { notice?: string }).notice;
@@ -333,6 +335,12 @@ export const Account: React.FC<{ section?: 'listings' }> = ({ section }) => {
       <div className="am-item static">
         <Palette size={18} /> <span>Theme</span> <ThemeSwitch />
       </div>
+      <button type="button" className="am-item" onClick={openFeedback}>
+        <MessageSquarePlus size={18} /> <span>Send beta feedback</span> <ChevronRight size={16} className="muted" />
+      </button>
+      <Link to="/privacy" className="am-item">
+        <ShieldCheck size={18} /> <span>Beta terms &amp; privacy</span> <ChevronRight size={16} className="muted" />
+      </Link>
       <div className="am-phone">
         <span className="overline">Primary phone</span>
         {user.phone

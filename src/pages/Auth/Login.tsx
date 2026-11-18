@@ -108,6 +108,7 @@ export const Login: React.FC = () => {
           <div>
             <div className="ai-title">Safe &amp; authentic</div>
             <div className="ai-text">Every Becho account confirms its email with a one-time code, and listings are checked by our team before they go live.</div>
+            <div className="ai-text" style={{ marginTop: 6 }}>Becho is in closed beta — read the <Link to="/privacy" style={linkStyle}>beta terms &amp; privacy notice</Link>.</div>
           </div>
         </div>
       }

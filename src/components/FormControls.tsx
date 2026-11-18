@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff, Info, AlertTriangle } from 'lucide-react';
 import { PASSWORD_RULES } from '../utils/validation';
+import { BetaChip } from '../feedback/Beta';
 
 /* Shared building blocks for the account forms (login, register, reset, account settings). */
 
@@ -189,6 +190,7 @@ export const AuthCard: React.FC<{
           <span className="brand-tag">Buy & Sell Locally</span>
         </span>
       </Link>
+      <BetaChip />
     </div>
     {top}
     <header className="auth-head">

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate, useSearchParams, useLocation as useRouterLocation } from 'react-router-dom';
 import {
-  ArrowLeft, BadgeCheck, Compass, Heart, Home as HomeIcon, List, LogOut, MessageCircle, MessageSquare, Plus, Search, User,
+  ArrowLeft, BadgeCheck, Compass, Heart, Home as HomeIcon, List, LogOut, MessageCircle, MessageSquare, MessageSquarePlus, Plus, Search, ShieldCheck, User,
 } from 'lucide-react';
 import { fetchApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -11,6 +11,7 @@ import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from './ThemeToggle';
 import { Avatar, useCategories } from './ui';
 import { useLocation } from '../context/LocationContext';
+import { BetaChip, useBeta } from '../feedback/Beta';
 
 interface ConversationSummary {
   id: string;
@@ -39,6 +40,7 @@ function useUnreadChats() {
 
 const AccountMenu: React.FC = () => {
   const { user, logout } = useAuth();
+  const { openFeedback } = useBeta();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -81,6 +83,8 @@ const AccountMenu: React.FC = () => {
           <button role="menuitem" className="menu-item" onClick={() => go('/account')}><User size={16} /> My account</button>
           <button role="menuitem" className="menu-item" onClick={() => go('/my-listings')}><List size={16} /> My listings</button>
           <button role="menuitem" className="menu-item" onClick={() => go('/favorites')}><Heart size={16} /> Saved ads</button>
+          <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); openFeedback(); }}><MessageSquarePlus size={16} /> Send feedback</button>
+          <button role="menuitem" className="menu-item" onClick={() => go('/privacy')}><ShieldCheck size={16} /> Beta terms &amp; privacy</button>
           <div className="menu-item" style={{ justifyContent: 'space-between', cursor: 'default' }}>
             <span>Theme</span>
             <ThemeToggle />
@@ -155,6 +159,7 @@ const NO_FOOTER = ['/login', '/register', '/forgot-password', '/verify'];
 export const Footer: React.FC = () => {
   const { areas } = useLocation();
   const { user } = useAuth();
+  const { openFeedback } = useBeta();
   const { pathname } = useRouterLocation();
   if (NO_FOOTER.includes(pathname)) return null;
   return (
@@ -190,6 +195,8 @@ export const Footer: React.FC = () => {
               <li><Link to="/create-listing">Post an ad</Link></li>
               {user ? <li><Link to="/account">My account</Link></li> : <li><Link to="/login">Sign in</Link></li>}
               <li><Link to="/forgot-password">Reset your password</Link></li>
+              <li><button type="button" className="footer-link-btn" onClick={openFeedback}>Send beta feedback</button></li>
+              <li><Link to="/privacy">Beta terms &amp; privacy</Link></li>
             </ul>
           </div>
         </div>
@@ -263,6 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({ title, backTo, actions, hideTabs
               <span className="brand-tag">Buy & Sell Locally</span>
             </span>
           </Link>
+          <BetaChip />
           <span className="brand-sep desktop-only" aria-hidden="true" />
           <LocationSelector />
           <TopSearch />
@@ -299,6 +307,7 @@ export const Navbar: React.FC<NavbarProps> = ({ title, backTo, actions, hideTabs
           <div className="subbar">
             <button type="button" className="icon-btn" onClick={back} aria-label="Back"><ArrowLeft size={22} /></button>
             <div className="subbar-title">{title}</div>
+            <BetaChip />
             {actions}
           </div>
         )}

@@ -59,7 +59,7 @@ export const Register: React.FC = () => {
     for (const f of FIELDS) next[f] = validators[f](trimmed);
     setErrors(next);
     setTouched({ name: true, mobile: true, email: true, password: true, confirm: true });
-    const termsErr = agreed ? undefined : 'Please agree to the terms to continue';
+    const termsErr = agreed ? undefined : 'Please agree to the beta terms and privacy notice to continue';
     setAgreeError(termsErr);
     if (!hasErrors(next) && termsErr) { document.getElementById('reg-terms')?.focus(); return; }
     if (hasErrors(next)) {
@@ -175,7 +175,12 @@ export const Register: React.FC = () => {
               aria-invalid={!!agreeError} aria-describedby={agreeError ? 'reg-terms-error' : undefined}
               onChange={(e) => { setAgreed(e.target.checked); if (e.target.checked) setAgreeError(undefined); }}
             />
-            <span>I agree to Becho’s terms of use: I’ll deal honestly, meet safely in public places and only list items I own.</span>
+            <span>
+              I agree to the{' '}
+              <a href="/privacy" target="_blank" rel="noopener" className="link" onClick={(e) => e.stopPropagation()}>
+                Becho beta terms and privacy notice
+              </a>
+            </span>
           </label>
           {agreeError && <div id="reg-terms-error" role="alert" style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '0.3rem' }}>{agreeError}</div>}
         </div>
